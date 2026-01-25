@@ -67,6 +67,21 @@ mocks-generate:
 lint:
     golangci-lint run
 
+# Container commands
+
+# Setup buildx builder (run once)
+setup-buildx:
+	docker buildx create --name multiarch --use || docker buildx use multiarch
+	docker buildx inspect --bootstrap
+
+# Build multi-arch Docker image (arm64 and amd64)
+# Usage: just container IMAGE="preoomkiller-controller" TAG="latest"
+container IMAGE="preoomkiller-controller" TAG="latest":
+	docker buildx build --platform linux/arm64,linux/amd64 \
+		-t {{IMAGE}}:{{TAG}} \
+		--file Dockerfile \
+		.
+
 # Install tools
 install-tools:
     brew install mockery

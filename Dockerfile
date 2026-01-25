@@ -1,11 +1,12 @@
 # https://hub.docker.com/_/golang/tags?name=1.25.6-alpine3.23
-FROM golang:1.25.6-alpine3.23 as builder
+FROM golang:1.25.6-alpine3.23 AS builder
 
 WORKDIR /build
 COPY go.mod go.sum ./
 RUN go mod download
 
 COPY ./cmd/ ./cmd/
+COPY ./internal/ ./internal/
 RUN CGO_ENABLED=0 go build -ldflags="-w -s" -o ./preoomkiller-controller ./cmd/preoomkiller-controller
 
 # Starting on Scratch
