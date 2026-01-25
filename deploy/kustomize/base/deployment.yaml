@@ -38,6 +38,10 @@ spec:
       - image: skillcoder/preoomkiller-controller:latest
         imagePullPolicy: IfNotPresent
         name: preoomkiller-controller
+        ports:
+        - containerPort: 8080
+          name: http
+          protocol: TCP
         resources:
           requests:
             cpu: 30m

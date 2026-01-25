@@ -9,3 +9,4 @@ roleRef:
 subjects:
 - kind: ServiceAccount
   name: preoomkiller-controller
+  namespace: kube-system

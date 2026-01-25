@@ -23,12 +23,6 @@ type Repository interface {
 	) error
 }
 
-// UseCase is the interface for controller use cases.
-type UseCase interface {
-	ReconcileCommand(ctx context.Context) error
-	RunCommand(ctx context.Context) error
-}
-
 // notFound is a private interface for checking "not found" errors
 // without importing the adapter package.
 type notFound interface {

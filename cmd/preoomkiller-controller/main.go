@@ -9,15 +9,18 @@ import (
 
 	"github.com/skillcoder/preoomkiller-controller/internal/app"
 	"github.com/skillcoder/preoomkiller-controller/internal/config"
+	"github.com/skillcoder/preoomkiller-controller/internal/infra/appstate"
+	"github.com/skillcoder/preoomkiller-controller/internal/infra/logging"
 	"github.com/skillcoder/preoomkiller-controller/internal/infra/shutdown"
 )
 
 func main() {
+	appStart := time.Now()
 	// Start listening for signals immediately as first thing, before any other initialization
 	signals := shutdown.Notify()
 	ctx := context.Background()
 
-	err := run(ctx, signals)
+	err := run(ctx, signals, appStart)
 	if err != nil {
 		slog.ErrorContext(ctx, "failed to run", "reason", err)
 		// Give the logger some time to flush
@@ -28,13 +31,16 @@ func main() {
 	slog.InfoContext(ctx, "bye")
 }
 
-func run(ctx context.Context, signals <-chan os.Signal) error {
+func run(ctx context.Context, signals <-chan os.Signal, appStart time.Time) error {
 	cfg, err := config.Load()
 	if err != nil {
 		return fmt.Errorf("load config: %w", err)
 	}
 
-	application, err := app.New(cfg, signals)
+	logger := logging.New(cfg.LogFormat, cfg.LogLevel)
+	appState := appstate.New(logger, appStart, "/mnt/signal/terminating", signals)
+
+	application, err := app.New(logger, cfg, appState)
 	if err != nil {
 		return fmt.Errorf("new application: %w", err)
 	}

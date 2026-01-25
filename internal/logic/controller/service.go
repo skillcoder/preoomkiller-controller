@@ -5,34 +5,80 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"sync/atomic"
 	"time"
 
 	"k8s.io/apimachinery/pkg/api/resource"
 )
 
-type service struct {
-	logger   *slog.Logger
-	repo     Repository
-	interval time.Duration
+type Service struct {
+	logger     *slog.Logger
+	repo       Repository
+	interval   time.Duration
+	ready      chan struct{}
+	inShutdown atomic.Bool
+	doneCh     chan struct{}
 }
 
-// NewService creates a new controller service.
-func NewService(
+// New creates a new controller service.
+func New(
 	logger *slog.Logger,
 	repo Repository,
 	interval time.Duration,
-) UseCase {
-	return &service{
+) *Service {
+	return &Service{
 		logger:   logger,
 		repo:     repo,
 		interval: interval,
+		ready:    make(chan struct{}),
+		doneCh:   make(chan struct{}),
 	}
 }
 
-var _ UseCase = (*service)(nil)
+func (s *Service) Start(ctx context.Context) error {
+	if s.inShutdown.Load() {
+		s.logger.InfoContext(ctx, "controller service is shutting down, skipping start")
+
+		return nil
+	}
+
+	go s.RunCommand(ctx)
+
+	return nil
+}
+
+// Name returns the name of the server component
+func (s *Service) Name() string {
+	return "preoomkiller-controller"
+}
+
+func (s *Service) Shutdown(ctx context.Context) error {
+	if !s.inShutdown.CompareAndSwap(false, true) {
+		s.logger.ErrorContext(ctx, "controller service is already shutting down, skipping shutdown")
+
+		return nil // Already shutting down
+	}
+
+	defer func() {
+		s.logger.InfoContext(ctx, "controller service shut downed")
+	}()
+
+	s.logger.InfoContext(ctx, "shutting down controller service")
+
+	// Wait for RunCommand to exit, respecting shutdown context
+	// RunCommand will exit when ctx.Done() is triggered (context cancellation)
+	select {
+	case <-ctx.Done():
+		return fmt.Errorf("shutdown context done before controller loop exited: %w", ctx.Err())
+	case <-s.doneCh:
+		s.logger.InfoContext(ctx, "controller loop exited")
+	}
+
+	return nil
+}
 
 // ReconcileCommand runs one iteration of the reconciliation loop.
-func (s *service) ReconcileCommand(ctx context.Context) error {
+func (s *Service) ReconcileCommand(ctx context.Context) error {
 	logger := s.logger.With("controller", "ReconcileCommand")
 
 	pods, err := s.repo.ListPodsQuery(
@@ -86,7 +132,7 @@ func (s *service) ReconcileCommand(ctx context.Context) error {
 	return nil
 }
 
-func (s *service) processPod(
+func (s *Service) processPod(
 	ctx context.Context,
 	logger *slog.Logger,
 	pod Pod,
@@ -147,12 +193,20 @@ func (s *service) processPod(
 	return false, nil
 }
 
+func (s *Service) Ready() <-chan struct{} {
+	return s.ready
+}
+
 // RunCommand runs the controller in a loop with the configured interval.
-func (s *service) RunCommand(ctx context.Context) error {
+func (s *Service) RunCommand(ctx context.Context) {
+	defer close(s.doneCh)
+
 	logger := s.logger.With("controller", "RunCommand")
 
 	ticker := time.NewTicker(s.interval)
 	defer ticker.Stop()
+
+	close(s.ready)
 
 	for {
 		err := s.ReconcileCommand(ctx)
@@ -165,12 +219,12 @@ func (s *service) RunCommand(ctx context.Context) error {
 		case <-ctx.Done():
 			logger.InfoContext(ctx, "terminating main controller loop")
 
-			return nil
+			return
 		}
 	}
 }
 
-func (s *service) evictPodCommand(
+func (s *Service) evictPodCommand(
 	ctx context.Context,
 	logger *slog.Logger,
 	podName,

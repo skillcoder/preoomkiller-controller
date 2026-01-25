@@ -13,6 +13,7 @@ type Config struct {
 	Interval   time.Duration
 	LogLevel   string
 	LogFormat  string
+	HTTPPort   string
 }
 
 func Load() (*Config, error) {
@@ -21,6 +22,7 @@ func Load() (*Config, error) {
 		KubeMaster: os.Getenv("KUBERNETES_MASTER"),
 		LogLevel:   getEnvOrDefault("LOG_LEVEL", "info"),
 		LogFormat:  getEnvOrDefault("LOG_FORMAT", "json"),
+		HTTPPort:   getEnvOrDefault("HTTP_PORT", "8080"),
 	}
 
 	intervalStr := getEnvOrDefault("INTERVAL", "300")
