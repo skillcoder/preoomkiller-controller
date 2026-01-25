@@ -96,6 +96,20 @@ func (s *AppState) SetStarting(_ context.Context) error {
 
 // SetRunning transitions the state from Starting to Running
 func (s *AppState) SetRunning(ctx context.Context) error {
+	// Start pinger service
+	if err := s.pinger.Start(ctx); err != nil {
+		return fmt.Errorf("start pinger service: %w", err)
+	}
+
+	s.RegisterShutdowner(s.pinger)
+
+	select {
+	case <-ctx.Done():
+		return fmt.Errorf("context done")
+	case <-s.pinger.Ready():
+		// Pinger is ready
+	}
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
 

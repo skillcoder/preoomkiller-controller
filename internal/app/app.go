@@ -114,12 +114,12 @@ func (a *App) Run(originCtx context.Context) error {
 	a.appState.RegisterShutdowner(a.controller)
 	a.appState.RegisterPinger(a.controller)
 
-	// Wait for both httpServer and controller to be ready
+	// Wait for pinger service, httpServer and controller to be ready
 	select {
 	case <-ctx.Done():
 		return fmt.Errorf("context done")
 	case <-allChannelsClose(ctx, a.logger, a.httpServer.Ready(), a.controller.Ready()):
-		// Both are ready
+		// All are ready
 	}
 
 	// Set running state

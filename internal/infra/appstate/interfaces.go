@@ -1,9 +1,11 @@
 package appstate
 
 import (
+	"context"
 	"time"
 
 	"github.com/skillcoder/preoomkiller-controller/internal/infra/pinger"
+	"github.com/skillcoder/preoomkiller-controller/internal/infra/shutdown"
 )
 
 type pingerStatsGetter interface {
@@ -12,6 +14,9 @@ type pingerStatsGetter interface {
 
 // pingerServer is an internal interface for pinger management
 type pingerServer interface {
+	Start(ctx context.Context) error
+	Ready() <-chan struct{}
+	shutdown.Shutdowner
 	Register(pinger pinger.Pinger) error
 	pingerStatsGetter
 }
