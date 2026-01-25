@@ -1,38 +1,30 @@
 # preoomkiller-controller
 
-A controller to gracefully evict selected pods before they get **OOMKilled** by
-**Kubernetes**.  
-Usefull to workaround memory leaks.
+A Kubernetes controller that gracefully evicts selected pods before they get **OOMKilled** by Kubernetes. Useful for working around memory leaks.
 
-# Compatibility with upstream
+## Compatibility with upstream
 
-Intentionally NOT compatible:  
-- ENV for config insted of flags
-- different label
-- different annotation
-- different default interval (300s insted 60s)
+Intentionally **NOT compatible** with upstream:
+- Uses environment variables for configuration instead of flags
+- Different label: `preoomkiller.beta.k8s.skillcoder.com/enabled=true`
+- Different annotation: `preoomkiller.beta.k8s.skillcoder.com/memory-threshold`
+- Different default interval: `300s` instead of `60s`
 
-# How it works?
+## How it works
 
-`preoomkiller-controller` watches (at most once every `300s` by default, with 1 second delay between each pod) memory usage
-metrics for all pods matching label selector `preoomkiller.beta.k8s.skillcoder.com/enabled=true`.
-Pods can specify a **preoomkiller** `memory-threshold`, e.g., `512Mi`, `1Gi`, etc.
-via an annotation `preoomkiller.beta.k8s.skillcoder.com/memory-threshold`.
-When `preoomkiller-controller` finds that the pods' memory usage has crossed
-the specified threshold, it starts trying to evict the pod, until it's evicted.
+The `preoomkiller-controller` watches memory usage metrics for all pods matching the label selector `preoomkiller.beta.k8s.skillcoder.com/enabled=true`. By default, it checks at most once every `300s`, with a 1 second delay between each pod.
 
-IMPORTANT! Keep in mind threshold in annotation applied to sum of all containers memory usages in the pod, including sidecars.
+Pods can specify a memory threshold (e.g., `512Mi`, `1Gi`) via the annotation `preoomkiller.beta.k8s.skillcoder.com/memory-threshold`. When the controller detects that a pod's memory usage has crossed the specified threshold, it attempts to evict the pod using Kubernetes' eviction API until the pod is successfully evicted.
 
-This operation is very safe, as it uses Kubernetes' pod **eviction** API to
-evict pods. Pod eviction API takes into account **PodDisruptionBudget** for
-the pods and ensures that a specified minimum number of ready pods are always
-available.
+> **Important:** The threshold in the annotation applies to the **sum of all container memory usages** in the pod, including sidecars.
 
-# Usage
+This operation is safe because it uses Kubernetes' pod **eviction** API, which respects **PodDisruptionBudget** constraints and ensures that a specified minimum number of ready pods remain available.
 
-## Deploy
+## Usage
 
-### Setup RBAC
+### Deployment
+
+#### Setup RBAC
 
 ```
 kubectl -n kube-system create serviceaccount preoomkiller-controller
@@ -67,38 +59,42 @@ rules:
   - create
 EOF
 
-kubectl create clusterrolebinding preoomkiller-controller --clusterrole=preoomkiller-controller --serviceaccount=kube-system:preoomkiller-controller
+kubectl create clusterrolebinding preoomkiller-controller \
+  --clusterrole=preoomkiller-controller \
+  --serviceaccount=kube-system:preoomkiller-controller
 ```
 
-### Deploy controller
+#### Deploy controller
 
+```bash
+kubectl -n kube-system run preoomkiller-controller \
+  --image=gha.io/skillcoder/preoomkiller-controller:latest \
+  --serviceaccount=preoomkiller-controller \
+  --restart=Always
 ```
-kubectl -n kube-system run --image=gha.io/skillcoder/preoomkiller-controller:latest --serviceaccount=preoomkiller-controller
-```
 
-### Add labels, annotations to pods
+#### Configure pods
 
-You can configure pods, deployments, statefulsets, daemonsets to add:
+Add the following to your pods templates metadata (not to the deployments, statefulsets, or daemonsets metadata):
 
-- Pod label `preoomkiller.beta.k8s.skillcoder.com/enabled: true`
-- Pod annotation: `preoomkiller.beta.k8s.skillcoder.com/memory-threshold: 1250Mi`
+- **Label:** `preoomkiller.beta.k8s.skillcoder.com/enabled: "true"`
+- **Annotation:** `preoomkiller.beta.k8s.skillcoder.com/memory-threshold: "1250Mi"`
 
-For example:
+Example:
 
-```
+```yaml
 apiVersion: v1
 kind: Pod
 metadata:
   name: annotations-demo
   labels:
-    preoomkiller.beta.k8s.skillcoder.com/enabled: true
+    preoomkiller.beta.k8s.skillcoder.com/enabled: "true"
   annotations:
-    imageregistry: "https://hub.docker.com/"
-    preoomkiller.beta.k8s.skillcoder.com/memory-threshold: 2Gi
+    preoomkiller.beta.k8s.skillcoder.com/memory-threshold: "2Gi"
 spec:
   containers:
   - name: nginx
     image: nginx:1.29.4-alpine3.23-slim
     ports:
     - containerPort: 80
- ```
+```
