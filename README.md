@@ -4,6 +4,13 @@ A controller to gracefully evict selected pods before they get **OOMKilled** by
 **Kubernetes**.  
 Usefull to workaround memory leaks.
 
+# Compatibility with upstream
+
+Intentionally NOT compatible:  
+- ENV for config insted of flags
+- different label
+- different annotation
+
 # How it works?
 
 `preoomkiller-controller` watches (once every `60s` by default) memory usage
