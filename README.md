@@ -10,15 +10,18 @@ Intentionally NOT compatible:
 - ENV for config insted of flags
 - different label
 - different annotation
+- different default interval (300s insted 60s)
 
 # How it works?
 
-`preoomkiller-controller` watches (once every `60s` by default) memory usage
-metrics for all pods matching label selector `preoomkiller-enabled=true`.
+`preoomkiller-controller` watches (at most once every `300s` by default, with 1 second delay between each pod) memory usage
+metrics for all pods matching label selector `preoomkiller.beta.k8s.skillcoder.com/enabled=true`.
 Pods can specify a **preoomkiller** `memory-threshold`, e.g., `512Mi`, `1Gi`, etc.
 via an annotation `preoomkiller.beta.k8s.skillcoder.com/memory-threshold`.
 When `preoomkiller-controller` finds that the pods' memory usage has crossed
 the specified threshold, it starts trying to evict the pod, until it's evicted.
+
+IMPORTANT! Keep in mind threshold in annotation applied to sum of all containers memory usages in the pod, including sidecars.
 
 This operation is very safe, as it uses Kubernetes' pod **eviction** API to
 evict pods. Pod eviction API takes into account **PodDisruptionBudget** for
@@ -77,7 +80,7 @@ kubectl -n kube-system run --image=gha.io/skillcoder/preoomkiller-controller:lat
 
 You can configure pods, deployments, statefulsets, daemonsets to add:
 
-- Pod label `preoomkiller-enabled: true`
+- Pod label `preoomkiller.beta.k8s.skillcoder.com/enabled: true`
 - Pod annotation: `preoomkiller.beta.k8s.skillcoder.com/memory-threshold: 1250Mi`
 
 For example:
@@ -88,7 +91,7 @@ kind: Pod
 metadata:
   name: annotations-demo
   labels:
-    preoomkiller-enabled: true
+    preoomkiller.beta.k8s.skillcoder.com/enabled: true
   annotations:
     imageregistry: "https://hub.docker.com/"
     preoomkiller.beta.k8s.skillcoder.com/memory-threshold: 2Gi

@@ -23,7 +23,7 @@ func Load() (*Config, error) {
 		LogFormat:  getEnvOrDefault("LOG_FORMAT", "json"),
 	}
 
-	intervalStr := getEnvOrDefault("INTERVAL", "60")
+	intervalStr := getEnvOrDefault("INTERVAL", "300")
 
 	interval, err := strconv.Atoi(intervalStr)
 	if err != nil {
