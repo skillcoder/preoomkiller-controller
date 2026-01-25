@@ -89,19 +89,53 @@ func (s *Service) Register(pinger Pinger) error {
 		return fmt.Errorf("register pinger %s: %w", name, ErrPingerAlreadyRegistered)
 	}
 
-	// Detect optional interface methods
+	info := s.createPingerInfo(pinger)
+	s.pingers[name] = info
+	s.stats[name] = NewPingerStats(name)
+
+	s.logPingerRegistration(name, info)
+
+	return nil
+}
+
+// createPingerInfo creates pinger info by detecting optional interface methods
+func (s *Service) createPingerInfo(pinger Pinger) *pingerInfo {
+	readyCritical := s.detectReadyCritical(pinger)
+	healthCritical := s.detectHealthCritical(pinger)
+	timeout := s.detectTimeout(pinger)
+
+	return &pingerInfo{
+		pinger:         pinger,
+		readyCritical:  readyCritical,
+		healthCritical: healthCritical,
+		timeout:        timeout,
+	}
+}
+
+// detectReadyCritical detects if pinger implements readyCriticalPinger
+func (s *Service) detectReadyCritical(pinger Pinger) bool {
 	readyCritical := true
 
 	if rc, ok := pinger.(readyCriticalPinger); ok {
 		readyCritical = rc.PingerReadyCritical()
 	}
 
+	return readyCritical
+}
+
+// detectHealthCritical detects if pinger implements healthCriticalPinger
+func (s *Service) detectHealthCritical(pinger Pinger) bool {
 	healthCritical := true
 
 	if hc, ok := pinger.(healthCriticalPinger); ok {
 		healthCritical = hc.PingerCritical()
 	}
 
+	return healthCritical
+}
+
+// detectTimeout detects if pinger implements timeoutPinger
+func (s *Service) detectTimeout(pinger Pinger) time.Duration {
 	timeout := defaultPingTimeout
 
 	if tp, ok := pinger.(timeoutPinger); ok {
@@ -111,33 +145,26 @@ func (s *Service) Register(pinger Pinger) error {
 		}
 	}
 
-	info := &pingerInfo{
-		pinger:         pinger,
-		readyCritical:  readyCritical,
-		healthCritical: healthCritical,
-		timeout:        timeout,
-	}
+	return timeout
+}
 
-	s.pingers[name] = info
-	s.stats[name] = NewPingerStats(name)
-
+// logPingerRegistration logs pinger registration with optional fields
+func (s *Service) logPingerRegistration(name string, info *pingerInfo) {
 	logFields := []any{"name", name}
 
-	if readyCritical {
+	if info.readyCritical {
 		logFields = append(logFields, "readyCritical", true)
 	}
 
-	if healthCritical {
+	if info.healthCritical {
 		logFields = append(logFields, "healthCritical", true)
 	}
 
-	if timeout != defaultPingTimeout {
-		logFields = append(logFields, "timeout", timeout)
+	if info.timeout != defaultPingTimeout {
+		logFields = append(logFields, "timeout", info.timeout)
 	}
 
 	s.logger.Info("pinger registered", logFields...)
-
-	return nil
 }
 
 // Start starts the pinger service in a goroutine
@@ -256,58 +283,106 @@ func (s *Service) run(ctx context.Context) {
 
 // runPingers executes all registered pingers in parallel
 func (s *Service) runPingers(ctx context.Context, logger *slog.Logger) {
-	s.mu.RLock()
-	pingers := make(map[string]*pingerInfo, len(s.pingers))
-	maps.Copy(pingers, s.pingers)
-	s.mu.RUnlock()
+	pingers := s.copyPingers()
 
 	if len(pingers) == 0 {
 		return
 	}
 
+	s.executePingers(ctx, logger, pingers)
+}
+
+// copyPingers creates a thread-safe copy of pingers map
+func (s *Service) copyPingers() map[string]*pingerInfo {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	pingers := make(map[string]*pingerInfo, len(s.pingers))
+	maps.Copy(pingers, s.pingers)
+
+	return pingers
+}
+
+// executePingers executes all pingers in parallel and waits for completion
+func (s *Service) executePingers(
+	ctx context.Context,
+	logger *slog.Logger,
+	pingers map[string]*pingerInfo,
+) {
 	var wg sync.WaitGroup
 
 	for name, info := range pingers {
-		// Check if context is cancelled before starting each pinger
-		select {
-		case <-ctx.Done():
+		if s.shouldStop(ctx) {
 			return
-		default:
 		}
 
 		wg.Add(1)
 		s.wg.Add(1)
 
-		go func(n string, i *pingerInfo) {
-			defer wg.Done()
-			defer s.wg.Done()
-
-			// Create context with per-pinger timeout
-			pingCtx, cancel := context.WithTimeout(ctx, i.timeout)
-			defer cancel()
-
-			start := time.Now()
-			err := i.pinger.Ping(pingCtx)
-			latency := time.Since(start)
-
-			s.updateStats(n, latency, err)
-
-			if err != nil {
-				logger.DebugContext(ctx, "pinger error",
-					"name", n,
-					"latency", latency,
-					"reason", err,
-				)
-			} else {
-				logger.DebugContext(ctx, "pinger success",
-					"name", n,
-					"latency", latency,
-				)
-			}
-		}(name, info)
+		go s.runSinglePinger(ctx, logger, name, info, &wg)
 	}
 
-	// Wait for all pingers with context cancellation support
+	s.waitForPingers(ctx, &wg)
+}
+
+// shouldStop checks if context is cancelled
+func (s *Service) shouldStop(ctx context.Context) bool {
+	select {
+	case <-ctx.Done():
+		return true
+	default:
+		return false
+	}
+}
+
+// runSinglePinger executes a single pinger and updates stats
+func (s *Service) runSinglePinger(
+	ctx context.Context,
+	logger *slog.Logger,
+	name string,
+	info *pingerInfo,
+	wg *sync.WaitGroup,
+) {
+	defer wg.Done()
+	defer s.wg.Done()
+
+	pingCtx, cancel := context.WithTimeout(ctx, info.timeout)
+	defer cancel()
+
+	start := time.Now()
+	err := info.pinger.Ping(pingCtx)
+	latency := time.Since(start)
+
+	s.updateStats(name, latency, err)
+	s.logPingerResult(ctx, logger, name, latency, err)
+}
+
+// logPingerResult logs pinger result
+func (s *Service) logPingerResult(
+	ctx context.Context,
+	logger *slog.Logger,
+	name string,
+	latency time.Duration,
+	err error,
+) {
+	if err != nil {
+		logger.DebugContext(ctx, "pinger error",
+			"name", name,
+			"latency", latency,
+			"reason", err,
+		)
+
+		return
+	}
+
+	logger.DebugContext(ctx, "pinger success",
+		"name", name,
+		"latency", latency,
+	)
+}
+
+// waitForPingers waits for all pingers with context cancellation support
+func (s *Service) waitForPingers(ctx context.Context, wg *sync.WaitGroup) {
 	done := make(chan struct{})
 
 	go func() {

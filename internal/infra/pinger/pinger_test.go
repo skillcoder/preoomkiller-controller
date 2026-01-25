@@ -12,75 +12,54 @@ import (
 func TestService_Register(t *testing.T) {
 	t.Parallel()
 
-	tests := []struct {
-		name       string
-		pinger     Pinger
-		pingerName string
-		wantError  bool
-		errorType  error
-		setupFunc  func(*Service) error
-	}{
-		{
-			name:       "register valid pinger",
-			pinger:     &mockPinger{},
-			pingerName: "test1",
-			wantError:  false,
-		},
-		{
-			name:       "register nil pinger",
-			pinger:     nil,
-			pingerName: "test2",
-			wantError:  true,
-		},
-		{
-			name:       "register duplicate pinger",
-			pinger:     &mockPinger{},
-			pingerName: "test3",
-			wantError:  true,
-			errorType:  ErrPingerAlreadyRegistered,
-			setupFunc: func(s *Service) error {
-				return s.Register(&mockPinger{name: "test3"})
-			},
-		},
-	}
+	t.Run("register valid pinger", func(t *testing.T) {
+		t.Parallel()
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
+		logger := slog.Default()
+		service := New(logger, 1*time.Second)
+		pinger := &mockPinger{name: "test1"}
 
-			logger := slog.Default()
-			service := New(logger, 1*time.Second)
+		err := service.Register(pinger)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
 
-			if tt.setupFunc != nil {
-				err := tt.setupFunc(service)
-				if err != nil {
-					t.Fatalf("setup failed: %v", err)
-				}
-			}
+	t.Run("register nil pinger", func(t *testing.T) {
+		t.Parallel()
 
-			if tt.pinger != nil {
-				if mp, ok := tt.pinger.(*mockPinger); ok {
-					mp.name = tt.pingerName
-				}
-			}
+		logger := slog.Default()
+		service := New(logger, 1*time.Second)
 
-			err := service.Register(tt.pinger)
+		err := service.Register(nil)
+		if err == nil {
+			t.Fatal("expected error but got nil")
+		}
+	})
 
-			if tt.wantError {
-				if err == nil {
-					t.Fatal("expected error but got nil")
-				}
+	t.Run("register duplicate pinger", func(t *testing.T) {
+		t.Parallel()
 
-				if tt.errorType != nil && !errors.Is(err, tt.errorType) {
-					t.Fatalf("expected error type %v, got %v", tt.errorType, err)
-				}
-			} else {
-				if err != nil {
-					t.Fatalf("unexpected error: %v", err)
-				}
-			}
-		})
-	}
+		logger := slog.Default()
+		service := New(logger, 1*time.Second)
+		pinger1 := &mockPinger{name: "test3"}
+
+		err := service.Register(pinger1)
+		if err != nil {
+			t.Fatalf("first registration failed: %v", err)
+		}
+
+		pinger2 := &mockPinger{name: "test3"}
+
+		err = service.Register(pinger2)
+		if err == nil {
+			t.Fatal("expected error but got nil")
+		}
+
+		if !errors.Is(err, ErrPingerAlreadyRegistered) {
+			t.Fatalf("expected error type %v, got %v", ErrPingerAlreadyRegistered, err)
+		}
+	})
 }
 
 func TestService_GetStats(t *testing.T) {

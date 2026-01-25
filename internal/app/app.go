@@ -80,51 +80,88 @@ func New(
 
 // Run starts the application and blocks until context is cancelled.
 func (a *App) Run(originCtx context.Context) error {
-	// Check termination file
-	err := a.signalHandler.CheckTermination(originCtx)
-	if err != nil {
-		return fmt.Errorf("check termination: %w", err)
+	if err := a.initialize(originCtx); err != nil {
+		return err
 	}
 
 	ctx, cancel := context.WithCancel(originCtx)
 	defer cancel()
 
-	// Set starting state
-	if err = a.appState.SetStarting(ctx); err != nil {
+	if err := a.startServices(ctx, cancel); err != nil {
+		return err
+	}
+
+	if err := a.waitForReady(ctx); err != nil {
+		return err
+	}
+
+	return a.runUntilShutdown(ctx)
+}
+
+// initialize checks termination file and sets starting state
+func (a *App) initialize(ctx context.Context) error {
+	if err := a.signalHandler.CheckTermination(ctx); err != nil {
+		return fmt.Errorf("check termination: %w", err)
+	}
+
+	return nil
+}
+
+// startServices starts all services and registers them with app state
+func (a *App) startServices(ctx context.Context, cancel func()) error {
+	if err := a.appState.SetStarting(ctx); err != nil {
 		return fmt.Errorf("set starting application state: %w", err)
 	}
 
-	// Start signal handler
 	go a.signalHandler.HandleSignals(ctx, cancel)
 
-	// Start HTTP server
-	if err = a.httpServer.Start(ctx); err != nil {
+	if err := a.startHTTPServer(ctx); err != nil {
+		return err
+	}
+
+	if err := a.startController(ctx); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// startHTTPServer starts the HTTP server and registers it
+func (a *App) startHTTPServer(ctx context.Context) error {
+	if err := a.httpServer.Start(ctx); err != nil {
 		return fmt.Errorf("start http server: %w", err)
 	}
 
-	if err = a.appState.RegisterShutdowner(a.httpServer); err != nil {
+	if err := a.appState.RegisterShutdowner(a.httpServer); err != nil {
 		return fmt.Errorf("register shutdowner: %w", err)
 	}
 
-	if err = a.appState.RegisterPinger(a.httpServer); err != nil {
+	if err := a.appState.RegisterPinger(a.httpServer); err != nil {
 		return fmt.Errorf("register pinger: %w", err)
 	}
 
-	// Start controller in goroutine
-	err = a.controller.Start(ctx)
-	if err != nil {
+	return nil
+}
+
+// startController starts the controller and registers it
+func (a *App) startController(ctx context.Context) error {
+	if err := a.controller.Start(ctx); err != nil {
 		return fmt.Errorf("start controller: %w", err)
 	}
 
-	if err = a.appState.RegisterShutdowner(a.controller); err != nil {
+	if err := a.appState.RegisterShutdowner(a.controller); err != nil {
 		return fmt.Errorf("register shutdowner: %w", err)
 	}
 
-	if err = a.appState.RegisterPinger(a.controller); err != nil {
+	if err := a.appState.RegisterPinger(a.controller); err != nil {
 		return fmt.Errorf("register pinger: %w", err)
 	}
 
-	// Wait for pinger service, httpServer and controller to be ready
+	return nil
+}
+
+// waitForReady waits for all services to be ready
+func (a *App) waitForReady(ctx context.Context) error {
 	select {
 	case <-ctx.Done():
 		return fmt.Errorf("context done")
@@ -132,14 +169,17 @@ func (a *App) Run(originCtx context.Context) error {
 		// All are ready
 	}
 
-	// Set running state
 	if err := a.appState.SetRunning(ctx); err != nil {
 		return fmt.Errorf("set running application state: %w", err)
 	}
 
 	a.logger.InfoContext(ctx, "starting controller")
 
-	// Wait for shutdown signal, context cancellation, or controller error
+	return nil
+}
+
+// runUntilShutdown waits for shutdown signal and performs shutdown
+func (a *App) runUntilShutdown(ctx context.Context) error {
 	<-ctx.Done()
 	a.logger.InfoContext(ctx, "shutting down application by context")
 

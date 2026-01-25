@@ -1,6 +1,7 @@
 package pinger
 
 import (
+	"slices"
 	"sort"
 	"sync"
 	"time"
@@ -12,6 +13,24 @@ const (
 
 	// ErrorLatencyBufferSize is the number of error ping latencies to track
 	ErrorLatencyBufferSize = 10
+
+	// PercentileMax is the maximum percentile value (100%)
+	PercentileMax = 100.0
+
+	// PercentileP99Threshold is the threshold for P99 percentile calculation
+	PercentileP99Threshold = 99.0
+
+	// MedianDivisor is used for calculating median index
+	MedianDivisor = 2
+
+	// PercentileP80 is the 80th percentile
+	PercentileP80 = 80.0
+
+	// PercentileP90 is the 90th percentile
+	PercentileP90 = 90.0
+
+	// PercentileP99 is the 99th percentile
+	PercentileP99 = 99.0
 )
 
 // ErrorSnapshot represents a snapshot of an error occurrence
@@ -134,17 +153,18 @@ func CalculatePercentile(latencies []time.Duration, percentile float64) time.Dur
 	if percentile < 0 {
 		percentile = 0
 	}
-	if percentile >= 100 {
+
+	if percentile >= PercentileMax {
 		return latencies[len(latencies)-1]
 	}
 
 	// For percentiles < 100, use floor: index = floor((n-1) * p / 100)
 	// Special case: for p99, round up to get the maximum value
-	indexFloat := float64(len(latencies)-1) * percentile / 100.0
+	indexFloat := float64(len(latencies)-1) * percentile / PercentileMax
 	index := int(indexFloat)
 
 	// Round up for p99 to get the last element
-	if percentile >= 99 {
+	if percentile >= PercentileP99Threshold {
 		index = len(latencies) - 1
 	}
 
@@ -171,9 +191,9 @@ func CalculateMedian(latencies []time.Duration) time.Duration {
 		return sorted[i] < sorted[j]
 	})
 
-	mid := len(sorted) / 2
-	if len(sorted)%2 == 0 {
-		return (sorted[mid-1] + sorted[mid]) / 2
+	mid := len(sorted) / MedianDivisor
+	if len(sorted)%MedianDivisor == 0 {
+		return (sorted[mid-1] + sorted[mid]) / MedianDivisor
 	}
 
 	return sorted[mid]
@@ -201,17 +221,15 @@ func calculateLatencyMetrics(latencies []time.Duration) LatencyMetrics {
 
 	sorted := make([]time.Duration, len(latencies))
 	copy(sorted, latencies)
-	sort.Slice(sorted, func(i, j int) bool {
-		return sorted[i] < sorted[j]
-	})
+	slices.Sort(sorted)
 
 	return LatencyMetrics{
 		Count:   len(sorted),
 		Median:  CalculateMedian(sorted),
 		Average: CalculateAverage(sorted),
-		P80:     CalculatePercentile(sorted, 80),
-		P90:     CalculatePercentile(sorted, 90),
-		P99:     CalculatePercentile(sorted, 99),
+		P80:     CalculatePercentile(sorted, PercentileP80),
+		P90:     CalculatePercentile(sorted, PercentileP90),
+		P99:     CalculatePercentile(sorted, PercentileP99),
 	}
 }
 
