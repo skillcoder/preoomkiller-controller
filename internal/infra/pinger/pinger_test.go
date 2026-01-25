@@ -3,42 +3,41 @@ package pinger
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"strconv"
 	"testing"
 	"time"
-
-	"log/slog"
 )
 
 func TestService_Register(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name      string
-		pinger    Pinger
+		name       string
+		pinger     Pinger
 		pingerName string
-		wantError bool
-		errorType error
-		setupFunc func(*Service) error
+		wantError  bool
+		errorType  error
+		setupFunc  func(*Service) error
 	}{
 		{
-			name:      "register valid pinger",
-			pinger:    &mockPinger{},
+			name:       "register valid pinger",
+			pinger:     &mockPinger{},
 			pingerName: "test1",
-			wantError: false,
+			wantError:  false,
 		},
 		{
-			name:      "register nil pinger",
-			pinger:    nil,
+			name:       "register nil pinger",
+			pinger:     nil,
 			pingerName: "test2",
-			wantError: true,
+			wantError:  true,
 		},
 		{
-			name:      "register duplicate pinger",
-			pinger:    &mockPinger{},
+			name:       "register duplicate pinger",
+			pinger:     &mockPinger{},
 			pingerName: "test3",
-			wantError: true,
-			errorType: ErrPingerAlreadyRegistered,
+			wantError:  true,
+			errorType:  ErrPingerAlreadyRegistered,
 			setupFunc: func(s *Service) error {
 				return s.Register(&mockPinger{name: "test3"})
 			},
@@ -46,7 +45,6 @@ func TestService_Register(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
@@ -65,11 +63,14 @@ func TestService_Register(t *testing.T) {
 					mp.name = tt.pingerName
 				}
 			}
+
 			err := service.Register(tt.pinger)
+
 			if tt.wantError {
 				if err == nil {
 					t.Fatal("expected error but got nil")
 				}
+
 				if tt.errorType != nil && !errors.Is(err, tt.errorType) {
 					t.Fatalf("expected error type %v, got %v", tt.errorType, err)
 				}
@@ -106,6 +107,7 @@ func TestService_GetStats(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for nonexistent pinger")
 	}
+
 	if !errors.Is(err, ErrPingerNotFound) {
 		t.Fatalf("expected ErrPingerNotFound, got %v", err)
 	}
@@ -135,6 +137,7 @@ func TestService_GetAllStats(t *testing.T) {
 	if allStats["pinger1"] == nil {
 		t.Fatal("expected stats for pinger1")
 	}
+
 	if allStats["pinger2"] == nil {
 		t.Fatal("expected stats for pinger2")
 	}
@@ -212,13 +215,12 @@ func TestLatencyBuffer(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
 			lb := NewLatencyBuffer(tt.capacity)
 
-			for i := 0; i < tt.addCount; i++ {
+			for i := range tt.addCount {
 				lb.Add(time.Duration(i) * time.Millisecond)
 			}
 
@@ -288,7 +290,6 @@ func TestCalculatePercentile(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
@@ -331,7 +332,6 @@ func TestCalculateMedian(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
@@ -369,7 +369,6 @@ func TestCalculateAverage(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
@@ -466,7 +465,7 @@ func TestService_ParallelExecution(t *testing.T) {
 	service := New(logger, 200*time.Millisecond)
 
 	// Register multiple pingers
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		err := service.Register(&mockPinger{name: "pinger" + strconv.Itoa(i)})
 		if err != nil {
 			t.Fatalf("register pinger%d failed: %v", i, err)
@@ -517,68 +516,68 @@ func TestService_IsReady_IsHealthy(t *testing.T) {
 
 	tests := []struct {
 		name          string
-		pinger         Pinger
-		shouldError    bool
-		wantIsReady    bool
-		wantIsHealthy  bool
+		pinger        Pinger
+		shouldError   bool
+		wantIsReady   bool
+		wantIsHealthy bool
 	}{
 		{
 			name:          "normal pinger with error",
 			pinger:        &mockPinger{name: "error", shouldError: true},
-			shouldError:    true,
-			wantIsReady:    false, // Default critical: ready only if no error
-			wantIsHealthy:  false, // Default critical: healthy only if no error
+			shouldError:   true,
+			wantIsReady:   false, // Default critical: ready only if no error
+			wantIsHealthy: false, // Default critical: healthy only if no error
 		},
 		{
 			name:          "normal pinger without error",
 			pinger:        &mockPinger{name: "success", shouldError: false},
-			shouldError:    false,
-			wantIsReady:    true,  // Default critical: ready when no error
-			wantIsHealthy:  true,  // Default critical: healthy when no error
+			shouldError:   false,
+			wantIsReady:   true, // Default critical: ready when no error
+			wantIsHealthy: true, // Default critical: healthy when no error
 		},
 		{
 			name:          "non-critical pinger with error",
 			pinger:        &criticalMockPinger{name: "non-critical-error", readyCritical: false, healthCritical: false, shouldError: true},
-			shouldError:    true,
-			wantIsReady:    true,  // Non-critical: always ready regardless of error
-			wantIsHealthy:  true,  // Non-critical: always healthy regardless of error
+			shouldError:   true,
+			wantIsReady:   true, // Non-critical: always ready regardless of error
+			wantIsHealthy: true, // Non-critical: always healthy regardless of error
 		},
 		{
 			name:          "non-critical pinger without error",
 			pinger:        &criticalMockPinger{name: "non-critical-success", readyCritical: false, healthCritical: false, shouldError: false},
-			shouldError:    false,
-			wantIsReady:    true,
-			wantIsHealthy:  true,
+			shouldError:   false,
+			wantIsReady:   true,
+			wantIsHealthy: true,
 		},
 		{
 			name:          "ready critical pinger with error",
 			pinger:        &criticalMockPinger{name: "ready-critical-error", readyCritical: true, healthCritical: false, shouldError: true},
-			shouldError:    true,
-			wantIsReady:    false, // Critical: ready only if no error
-			wantIsHealthy:  true,  // Non-critical for health: always healthy
+			shouldError:   true,
+			wantIsReady:   false, // Critical: ready only if no error
+			wantIsHealthy: true,  // Non-critical for health: always healthy
 		},
 		{
 			name:          "health critical pinger with error",
 			pinger:        &criticalMockPinger{name: "health-critical-error", readyCritical: false, healthCritical: true, shouldError: true},
-			shouldError:    true,
-			wantIsReady:    true,  // Non-critical for ready: always ready
-			wantIsHealthy:  false, // Critical: healthy only if no error
+			shouldError:   true,
+			wantIsReady:   true,  // Non-critical for ready: always ready
+			wantIsHealthy: false, // Critical: healthy only if no error
 		},
 		{
 			name:          "both critical pinger with error",
 			pinger:        &criticalMockPinger{name: "both-critical-error", readyCritical: true, healthCritical: true, shouldError: true},
-			shouldError:    true,
-			wantIsReady:    false, // Critical: ready only if no error
-			wantIsHealthy:  false, // Critical: healthy only if no error
+			shouldError:   true,
+			wantIsReady:   false, // Critical: ready only if no error
+			wantIsHealthy: false, // Critical: healthy only if no error
 		},
 	}
 
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
 			service := New(logger, 100*time.Millisecond)
+
 			err := service.Register(tt.pinger)
 			if err != nil {
 				t.Fatalf("register failed: %v", err)
@@ -719,6 +718,7 @@ func (m *mockPinger) Name() string {
 	if m.name != "" {
 		return m.name
 	}
+
 	return "mock-pinger"
 }
 

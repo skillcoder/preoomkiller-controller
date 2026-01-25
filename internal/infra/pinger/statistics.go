@@ -81,8 +81,8 @@ func (lb *LatencyBuffer) Len() int {
 	return lb.count
 }
 
-// PingerStats tracks statistics for a single pinger
-type PingerStats struct {
+// Stats tracks statistics for a single pinger
+type Stats struct {
 	Name              string
 	LastRun           time.Time
 	LastError         error
@@ -93,8 +93,8 @@ type PingerStats struct {
 }
 
 // NewPingerStats creates a new PingerStats instance
-func NewPingerStats(name string) *PingerStats {
-	return &PingerStats{
+func NewPingerStats(name string) *Stats {
+	return &Stats{
 		Name:             name,
 		SuccessLatencies: NewLatencyBuffer(SuccessLatencyBufferSize),
 		ErrorLatencies:   NewLatencyBuffer(ErrorLatencyBufferSize),
@@ -151,6 +151,7 @@ func CalculatePercentile(latencies []time.Duration, percentile float64) time.Dur
 	if index < 0 {
 		index = 0
 	}
+
 	if index >= len(latencies) {
 		index = len(latencies) - 1
 	}
@@ -215,7 +216,7 @@ func calculateLatencyMetrics(latencies []time.Duration) LatencyMetrics {
 }
 
 // GetStatistics computes and returns statistics from PingerStats
-func GetStatistics(stats *PingerStats, info *pingerInfo) *Statistics {
+func GetStatistics(stats *Stats, info *pingerInfo) *Statistics {
 	stats.mu.RLock()
 	defer stats.mu.RUnlock()
 

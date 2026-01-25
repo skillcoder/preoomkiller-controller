@@ -225,6 +225,9 @@ func (s *Service) RunCommand(ctx context.Context) {
 	ticker := time.NewTicker(s.interval)
 	defer ticker.Stop()
 
+	// NOTE: set immidiatly to speed up first ready signal for pinger.
+	s.setLastReconcileEndTime()
+
 	close(s.ready)
 
 	for {

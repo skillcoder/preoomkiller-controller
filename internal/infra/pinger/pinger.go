@@ -44,7 +44,7 @@ type Service struct {
 	logger     *slog.Logger
 	interval   time.Duration
 	pingers    map[string]*pingerInfo
-	stats      map[string]*PingerStats
+	stats      map[string]*Stats
 	mu         sync.RWMutex
 	ready      chan struct{}
 	inShutdown atomic.Bool
@@ -61,7 +61,7 @@ func New(
 		logger:   logger,
 		interval: interval,
 		pingers:  make(map[string]*pingerInfo),
-		stats:    make(map[string]*PingerStats),
+		stats:    make(map[string]*Stats),
 		ready:    make(chan struct{}),
 		doneCh:   make(chan struct{}),
 	}
@@ -91,16 +91,19 @@ func (s *Service) Register(pinger Pinger) error {
 
 	// Detect optional interface methods
 	readyCritical := true
+
 	if rc, ok := pinger.(readyCriticalPinger); ok {
 		readyCritical = rc.PingerReadyCritical()
 	}
 
 	healthCritical := true
+
 	if hc, ok := pinger.(healthCriticalPinger); ok {
 		healthCritical = hc.PingerCritical()
 	}
 
 	timeout := defaultPingTimeout
+
 	if tp, ok := pinger.(timeoutPinger); ok {
 		customTimeout := tp.PingerTimeout()
 		if customTimeout > 0 {
@@ -119,12 +122,15 @@ func (s *Service) Register(pinger Pinger) error {
 	s.stats[name] = NewPingerStats(name)
 
 	logFields := []any{"name", name}
+
 	if readyCritical {
 		logFields = append(logFields, "readyCritical", true)
 	}
+
 	if healthCritical {
 		logFields = append(logFields, "healthCritical", true)
 	}
+
 	if timeout != defaultPingTimeout {
 		logFields = append(logFields, "timeout", timeout)
 	}
@@ -230,6 +236,13 @@ func (s *Service) run(ctx context.Context) {
 	close(s.ready)
 
 	for {
+		// Check shutdown flag first
+		if s.inShutdown.Load() {
+			logger.InfoContext(ctx, "terminating pinger loop")
+
+			return
+		}
+
 		select {
 		case <-ticker.C:
 			s.runPingers(ctx, logger)
@@ -296,6 +309,7 @@ func (s *Service) runPingers(ctx context.Context, logger *slog.Logger) {
 
 	// Wait for all pingers with context cancellation support
 	done := make(chan struct{})
+
 	go func() {
 		wg.Wait()
 		close(done)

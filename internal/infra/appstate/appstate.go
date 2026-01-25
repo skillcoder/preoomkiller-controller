@@ -55,7 +55,7 @@ func New(
 	appStart time.Time,
 	terminationFilePath string,
 	quit <-chan os.Signal,
-	pinger pingerServer,
+	pingSvc pingerServer,
 ) *AppState {
 	return &AppState{
 		logger:              logger,
@@ -63,16 +63,19 @@ func New(
 		state:               StateInit,
 		quit:                quit,
 		terminationFilePath: terminationFilePath,
-		pinger:              pinger,
+		pinger:              pingSvc,
 		shutdowners:         make([]shutdown.Shutdowner, 0, defaultShutdownersCount),
 	}
 }
 
-func (s *AppState) RegisterPinger(pinger pinger.Pinger) error {
-	return s.pinger.Register(pinger)
+func (s *AppState) RegisterPinger(ping pinger.Pinger) error {
+	return s.pinger.Register(ping)
 }
 
 func (s *AppState) RegisterShutdowner(shutdowner shutdown.Shutdowner) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	s.shutdowners = append(s.shutdowners, shutdowner)
 
 	return nil
@@ -101,7 +104,9 @@ func (s *AppState) SetRunning(ctx context.Context) error {
 		return fmt.Errorf("start pinger service: %w", err)
 	}
 
-	s.RegisterShutdowner(s.pinger)
+	if err := s.RegisterShutdowner(s.pinger); err != nil {
+		return fmt.Errorf("register shutdowner: %w", err)
+	}
 
 	select {
 	case <-ctx.Done():
@@ -218,7 +223,13 @@ func (s *AppState) Shutdown(ctx context.Context) error {
 		return fmt.Errorf("set terminating application state: %w", err)
 	}
 
-	err := shutdown.GracefulShutdown(ctx, s.logger, s.shutdowners)
+	// Make a copy of shutdowners slice while holding the lock to avoid data race
+	s.mu.RLock()
+	shutdownersCopy := make([]shutdown.Shutdowner, len(s.shutdowners))
+	copy(shutdownersCopy, s.shutdowners)
+	s.mu.RUnlock()
+
+	err := shutdown.GracefulShutdown(ctx, s.logger, shutdownersCopy)
 	if err != nil {
 		return fmt.Errorf("shutdown: %w", err)
 	}

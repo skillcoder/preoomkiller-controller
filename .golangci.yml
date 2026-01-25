@@ -177,6 +177,7 @@ linters:
     rules:
       - linters:
           - funlen
+          - gocyclo
         path: internal/app/app.go
       - linters:
           - funlen

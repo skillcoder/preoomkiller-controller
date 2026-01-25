@@ -102,8 +102,13 @@ func (a *App) Run(originCtx context.Context) error {
 		return fmt.Errorf("start http server: %w", err)
 	}
 
-	a.appState.RegisterShutdowner(a.httpServer)
-	a.appState.RegisterPinger(a.httpServer)
+	if err = a.appState.RegisterShutdowner(a.httpServer); err != nil {
+		return fmt.Errorf("register shutdowner: %w", err)
+	}
+
+	if err = a.appState.RegisterPinger(a.httpServer); err != nil {
+		return fmt.Errorf("register pinger: %w", err)
+	}
 
 	// Start controller in goroutine
 	err = a.controller.Start(ctx)
@@ -111,8 +116,13 @@ func (a *App) Run(originCtx context.Context) error {
 		return fmt.Errorf("start controller: %w", err)
 	}
 
-	a.appState.RegisterShutdowner(a.controller)
-	a.appState.RegisterPinger(a.controller)
+	if err = a.appState.RegisterShutdowner(a.controller); err != nil {
+		return fmt.Errorf("register shutdowner: %w", err)
+	}
+
+	if err = a.appState.RegisterPinger(a.controller); err != nil {
+		return fmt.Errorf("register pinger: %w", err)
+	}
 
 	// Wait for pinger service, httpServer and controller to be ready
 	select {

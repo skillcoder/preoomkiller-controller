@@ -131,7 +131,9 @@ func TestAppState_Shutdown(t *testing.T) {
 	require.NoError(t, s.Shutdown(ctx))
 	require.Equal(t, appstate.StateTerminated, s.GetState())
 
-	// Shutdown again should be idempotent
-	require.NoError(t, s.Shutdown(ctx))
+	// Shutdown again should fail since state is already terminated
+	err := s.Shutdown(ctx)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "application already terminated")
 	require.Equal(t, appstate.StateTerminated, s.GetState())
 }

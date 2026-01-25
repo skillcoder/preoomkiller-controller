@@ -27,6 +27,7 @@ func Load() (*Config, error) {
 	}
 
 	pingerIntervalStr := getEnvOrDefault("PINGER_INTERVAL", "10")
+
 	pingerInterval, err := strconv.Atoi(pingerIntervalStr)
 	if err != nil {
 		return nil, fmt.Errorf("parse pinger interval: %w", err)
