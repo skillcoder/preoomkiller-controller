@@ -11,6 +11,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 
+	"github.com/skillcoder/preoomkiller-controller/internal/infra/appstate"
 	"github.com/skillcoder/preoomkiller-controller/internal/infra/shutdown"
 )
 
@@ -61,11 +62,11 @@ func (s *Server) Start(ctx context.Context) error {
 	router.Use(middleware.Recoverer)
 
 	// Register health endpoints
-	router.Get("/-/healthz", s.handleHealthz)
-	router.Get("/-/readyz", s.handleReadyz)
-	router.Get("/-/status", s.handleStatus)
+	router.Get("/-/healthz", appstate.HandleHealthz(s.logger, s.appState))
+	router.Get("/-/readyz", appstate.HandleReadyz(s.logger, s.appState))
+	router.Get("/-/status", appstate.HandleStatus(s.logger, s.appState))
 
-	addr := fmt.Sprintf(":%s", s.port)
+	addr := ":" + s.port
 	s.server = &http.Server{
 		Addr:              addr,
 		Handler:           router,
@@ -76,22 +77,20 @@ func (s *Server) Start(ctx context.Context) error {
 		MaxHeaderBytes:    maxHeaderBytes,
 	}
 
+	lc := &net.ListenConfig{
+		KeepAliveConfig: net.KeepAliveConfig{
+			Enable: true,
+		},
+	}
+
+	listener, err := lc.Listen(ctx, "tcp", addr)
+	if err != nil {
+		return fmt.Errorf("listen tcp: %w", err)
+	}
+
+	s.logger.InfoContext(ctx, "http server listening", "addr", listener.Addr().String())
+
 	go func() {
-		s.logger.InfoContext(ctx, "starting http server", "port", s.port)
-
-		lc := &net.ListenConfig{
-			KeepAliveConfig: net.KeepAliveConfig{
-				Enable: true,
-			},
-		}
-
-		listener, err := lc.Listen(ctx, "tcp", addr)
-		if err != nil {
-			s.logger.ErrorContext(ctx, "failed to listen", "error", err)
-
-			return
-		}
-
 		close(s.ready)
 
 		if err := s.server.Serve(listener); err != nil && err != http.ErrServerClosed {

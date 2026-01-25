@@ -79,7 +79,7 @@ func (s *AppState) SetRunning(ctx context.Context) error {
 
 	defer func() {
 		// Check termination file after initialization
-		if shutdown.CheckTerminationFile(s.terminationFilePath) {
+		if shutdown.CheckTerminationFile(ctx, s.logger, s.terminationFilePath) {
 			pid := os.Getpid()
 			s.logger.InfoContext(ctx, "termination file found after initialization, sending SIGTERM",
 				"pid", pid,

@@ -68,17 +68,22 @@ func (h *Handler) CheckTermination(ctx context.Context) error {
 }
 
 // CheckTerminationFile checks if the termination file exists
-func CheckTerminationFile(terminationFile string) bool {
+func CheckTerminationFile(ctx context.Context, logger *slog.Logger, terminationFile string) bool {
 	_, err := os.Stat(terminationFile)
 	if err != nil {
 		if !os.IsNotExist(err) {
-			slog.Error("error checking termination file", "error", err, "path", terminationFile)
+			logger.ErrorContext(ctx, "error checking termination file",
+				"error", err,
+				"path", terminationFile,
+			)
+
+			return false
 		}
 
 		return false
 	}
 
-	slog.Info("termination file found", "path", terminationFile)
+	logger.InfoContext(ctx, "termination file found", "path", terminationFile)
 
 	return true
 }

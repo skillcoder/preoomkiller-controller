@@ -35,7 +35,7 @@ func New(
 	cfg *config.Config,
 	appState appstater,
 ) (*App, error) {
-	shutdowners := make([]shutdown.Shutdowner, defaultShutdownersCount)
+	shutdowners := make([]shutdown.Shutdowner, 0, defaultShutdownersCount)
 	// Create K8s config
 	kubeConfig, err := clientcmd.BuildConfigFromFlags(
 		cfg.KubeMaster,
@@ -121,7 +121,7 @@ func (a *App) Run(originCtx context.Context) error {
 	select {
 	case <-ctx.Done():
 		return fmt.Errorf("context done")
-	case <-allChannelsClose(a.httpServer.Ready(), a.controller.Ready()):
+	case <-allChannelsClose(ctx, a.logger, a.httpServer.Ready(), a.controller.Ready()):
 		// Both are ready
 	}
 
@@ -148,7 +148,7 @@ func (a *App) Run(originCtx context.Context) error {
 
 // allChannelsClose waits for all provided channels to close/signal and returns
 // a channel that closes when all input channels have signaled.
-func allChannelsClose(cs ...<-chan struct{}) <-chan struct{} {
+func allChannelsClose(ctx context.Context, logger *slog.Logger, cs ...<-chan struct{}) <-chan struct{} {
 	count := len(cs)
 	out := make(chan struct{})
 
@@ -164,7 +164,9 @@ func allChannelsClose(cs ...<-chan struct{}) <-chan struct{} {
 		// This should never happen in practice, but handle overflow case
 		close(out)
 
-		slog.Error("allChannelsClose: len(cs) > math.MaxInt32 or < 0", "len", len(cs))
+		logger.ErrorContext(ctx, "allChannelsClose: len(cs) > math.MaxInt32 or < 0",
+			"len", len(cs),
+		)
 
 		return out
 	}
