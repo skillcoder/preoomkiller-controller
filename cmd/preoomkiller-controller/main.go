@@ -23,7 +23,7 @@ import (
 const (
 	EvictionKind                             = "Eviction"
 	PreoomkillerPodLabelSelector             = "preoomkiller-enabled=true"
-	PreoomkillerAnnotationMemoryThresholdKey = "preoomkiller.beta.k8s.zapier.com/memory-threshold"
+	PreoomkillerAnnotationMemoryThresholdKey = "preoomkiller.alpha.k8s.zapier.com/memory-threshold"
 )
 
 // Controller is responsible for ensuring that pods matching PreoomkillerPodLabelSelector
@@ -47,8 +47,6 @@ func evictPod(ctx context.Context, client kubernetes.Interface, podName, podName
 	if dryRun {
 		return true, nil
 	}
-
-	// GracePeriodSeconds ?
 	eviction := &policy.Eviction{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "policy/v1",
@@ -59,8 +57,8 @@ func evictPod(ctx context.Context, client kubernetes.Interface, podName, podName
 			Namespace: podNamespace,
 		},
 	}
-
 	err := client.PolicyV1().Evictions(eviction.Namespace).Evict(ctx, eviction)
+
 	if err == nil {
 		return true, nil
 	} else if apierrors.IsTooManyRequests(err) {
@@ -88,48 +86,57 @@ func (c *Controller) RunOnce(ctx context.Context) error {
 
 	for _, pod := range podList.Items {
 		podName, podNamespace := pod.ObjectMeta.Name, pod.ObjectMeta.Namespace
-		logger := slog.With("pod", podName, "namespace", podNamespace)
-
 		podMemoryThreshold, err := resource.ParseQuantity(pod.ObjectMeta.Annotations[PreoomkillerAnnotationMemoryThresholdKey])
 		if err != nil {
-			logger.ErrorContext(ctx, "failed to parse pod memory threshold", "reason", err)
-
+			slog.ErrorContext(ctx, "pod memory threshold fetch error",
+				"pod", podName,
+				"namespace", podNamespace,
+				"reason", err)
 			continue
 		}
 
-		logger = logger.With("memoryThreshold", podMemoryThreshold.String())
 		podMemoryUsage := &resource.Quantity{}
 
 		podMetrics, err := c.metricsClientset.MetricsV1beta1().PodMetricses(podNamespace).Get(ctx, podName, metav1.GetOptions{})
 		if err != nil {
-			logger.ErrorContext(ctx, "failed to fetch pod metrics", "reason", err)
-
-			continue
+			slog.ErrorContext(ctx, "pod metrics fetch error",
+				"pod", podName,
+				"namespace", podNamespace,
+				"reason", err)
+			return err
 		}
 
 		for _, containerMetrics := range podMetrics.Containers {
 			podMemoryUsage.Add(*containerMetrics.Usage.Memory())
-			logger.DebugContext(ctx, "container metrics",
+			slog.DebugContext(ctx, "container metrics",
+				"pod", podName,
+				"namespace", podNamespace,
 				"container", containerMetrics.Name,
 				"cpu", containerMetrics.Usage.Cpu().String(),
 				"memory", containerMetrics.Usage.Memory().String())
 		}
-
-		logger.DebugContext(ctx, "pod memory usage", "memoryUsage", podMemoryUsage.String())
+		slog.DebugContext(ctx, "pod memory usage",
+			"pod", podName,
+			"namespace", podNamespace,
+			"memoryUsage", podMemoryUsage.String())
 		if podMemoryUsage.Cmp(podMemoryThreshold) == 1 {
 			_, err := evictPod(ctx, c.clientset, podName, podNamespace, false)
 			if err != nil {
-				logger.ErrorContext(ctx, "failed to evict pod", "reason", err)
+				slog.ErrorContext(ctx, "pod eviction error",
+					"pod", podName,
+					"namespace", podNamespace,
+					"reason", err)
 			} else {
 				evictionCount += 1
-
-				logger.InfoContext(ctx, "pod evicted", "memoryUsage", podMemoryUsage.String())
+				slog.InfoContext(ctx, "pod evicted",
+					"pod", podName,
+					"namespace", podNamespace,
+					"memoryUsage", podMemoryUsage.String())
 			}
 		}
 	}
-
-	slog.InfoContext(ctx, "pods evicted during this run", "evictionCount", evictionCount)
-
+	slog.InfoContext(ctx, "pods evicted during this run",
+		"evictionCount", evictionCount)
 	return nil
 }
 
@@ -143,24 +150,16 @@ func (c *Controller) Run(ctx context.Context, stopCh chan struct{}) {
 		if err != nil {
 			slog.ErrorContext(ctx, "run once error", "reason", err)
 		}
-
 		select {
 		case <-ticker.C:
-		case <-ctx.Done():
-			slog.InfoContext(ctx, "terminating main controller loop due to context done")
-
-			return
 		case <-stopCh:
 			slog.InfoContext(ctx, "terminating main controller loop")
-
 			return
 		}
 	}
 }
 
 func main() {
-	ctx := context.Background()
-
 	var kubeconfig string
 	var master string
 	var loglevel string
@@ -172,13 +171,7 @@ func main() {
 	flag.IntVar(&interval, "interval", 60, "Interval (in seconds)")
 	flag.StringVar(&loglevel, "loglevel", "info", "Log level, one of debug, info, warn, error")
 	flag.StringVar(&logformat, "logformat", "json", "Log format, one of json, text")
-
-	err := flag.Set("logtostderr", "true")
-	if err != nil {
-		slog.ErrorContext(ctx, "failed to set logtostderr", "reason", err)
-		os.Exit(1)
-	}
-
+	flag.Set("logtostderr", "true")
 	flag.Parse()
 
 	// Setup logging
@@ -214,6 +207,8 @@ func main() {
 	logger := slog.New(handler)
 	slog.SetDefault(logger)
 
+	ctx := context.Background()
+
 	// creates the connection
 	config, err := clientcmd.BuildConfigFromFlags(master, kubeconfig)
 	if err != nil {
@@ -228,6 +223,7 @@ func main() {
 		os.Exit(1)
 	}
 
+	//
 	metricsClientset, err := metricsv.NewForConfig(config)
 	if err != nil {
 		slog.ErrorContext(ctx, "failed to create metrics clientset", "reason", err)
@@ -238,18 +234,16 @@ func main() {
 
 	// Now let's start the controller
 	stopCh := make(chan struct{})
-	
 	go handleSigterm(stopCh)
 	defer close(stopCh)
-
 	controller.Run(ctx, stopCh)
 }
 
 func handleSigterm(stopCh chan struct{}) {
 	ctx := context.Background()
 	signals := make(chan os.Signal, 1)
-	signal.Notify(signals, syscall.SIGTERM, syscall.SIGINT)
+	signal.Notify(signals, syscall.SIGTERM)
 	<-signals
-	slog.InfoContext(ctx, "received termination signal, terminating")
+	slog.InfoContext(ctx, "received sigterm, terminating")
 	close(stopCh)
 }

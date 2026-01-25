@@ -1,21 +1,17 @@
+# https://hub.docker.com/_/golang/tags?name=1.25.6-alpine3.23
+FROM golang:1.25.6-alpine3.23 as builder
 
-FROM golang:1.13-stretch as builder
-
-# I can't believe we still need this stupid env var for 1.12
-ENV GO111MODULE=on
-
-# Setting up sre-tools build
-COPY . $GOPATH/src/github.com/zapier/preoomkiller-controller/
-WORKDIR $GOPATH/src/github.com/zapier/preoomkiller-controller/
+WORKDIR /build
+COPY go.mod go.sum ./
 RUN go mod download
 
-# Running sre-tools build
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -a -installsuffix cgo -ldflags="-w -s" -o /go/bin/preoomkiller-controller
+COPY ./cmd/ ./cmd/
+RUN CGO_ENABLED=0 go build -ldflags="-w -s" -o ./preoomkiller-controller ./cmd/preoomkiller-controller
 
 # Starting on Scratch
 FROM scratch
 
 # Moving needed binaries to
-COPY --from=builder /go/bin/preoomkiller-controller /go/bin/preoomkiller-controller
+COPY --from=builder /build/preoomkiller-controller /bin/preoomkiller-controller
 
-ENTRYPOINT ["/go/bin/preoomkiller-controller"]
+ENTRYPOINT ["/bin/preoomkiller-controller"]
