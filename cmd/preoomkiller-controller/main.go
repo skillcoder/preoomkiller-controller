@@ -23,7 +23,7 @@ import (
 const (
 	EvictionKind                             = "Eviction"
 	PreoomkillerPodLabelSelector             = "preoomkiller-enabled=true"
-	PreoomkillerAnnotationMemoryThresholdKey = "preoomkiller.alpha.k8s.zapier.com/memory-threshold"
+	PreoomkillerAnnotationMemoryThresholdKey = "preoomkiller.beta.k8s.skillcoder.com/memory-threshold"
 )
 
 // Controller is responsible for ensuring that pods matching PreoomkillerPodLabelSelector

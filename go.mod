@@ -1,4 +1,4 @@
-module github.com/zapier/preoomkiller-controller
+module github.com/skillcoder/preoomkiller-controller
 
 go 1.25
 

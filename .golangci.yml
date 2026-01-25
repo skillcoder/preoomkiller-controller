@@ -1,0 +1,231 @@
+version: "2"
+run:
+  concurrency: 8
+  go: "1.25"
+  build-tags:
+    - component
+    - integration
+  allow-parallel-runners: true
+  timeout: 1m
+linters:
+  default: none
+  enable:
+    - asasalint
+    - asciicheck
+    - bidichk
+    - bodyclose
+    - canonicalheader
+    - containedctx
+    - contextcheck
+    - copyloopvar
+    - cyclop
+    - decorder
+    - depguard
+    - dogsled
+    - dupl
+    - dupword
+    - durationcheck
+    - errcheck
+    - errchkjson
+    - errname
+    - errorlint
+    - exhaustive
+    - fatcontext
+    - forbidigo
+    - forcetypeassert
+    - funlen
+    - ginkgolinter
+    - gocheckcompilerdirectives
+    - gochecknoinits
+    - gochecksumtype
+    - gocognit
+    - goconst
+    - gocritic
+    - gocyclo
+    - goheader
+    - gomoddirectives
+    - gomodguard
+    - goprintffuncname
+    - gosec
+    - gosmopolitan
+    - govet
+    - grouper
+    - importas
+    - inamedparam
+    - ineffassign
+    - interfacebloat
+    - intrange
+    - lll
+    - loggercheck
+    - maintidx
+    - makezero
+    - mirror
+    - misspell
+    - mnd
+    - musttag
+    - nakedret
+    - nestif
+    - nilerr
+    - nilnil
+    - nlreturn
+    - noctx
+    - nolintlint
+    - nonamedreturns
+    - nosprintfhostport
+    - prealloc
+    - predeclared
+    - promlinter
+    - protogetter
+    - reassign
+    - revive
+    - rowserrcheck
+    - sloglint
+    - spancheck
+    - sqlclosecheck
+    - staticcheck
+    - tagalign
+    - tagliatelle
+    - testableexamples
+    - thelper
+    - tparallel
+    - unconvert
+    - unparam
+    - unused
+    - usestdlibvars
+    - usetesting
+    - wastedassign
+    - whitespace
+    - wsl_v5
+    - zerologlint
+  settings:
+    wsl_v5:
+      allow-first-in-block: true
+      allow-whole-block: false
+      branch-max-lines: 2 
+    depguard:
+      rules:
+        main:
+          list-mode: lax
+          deny:
+            - pkg: github.com/sirupsen/logrus
+              desc: use standard log/slog instead
+            - pkg: github.com/satori/go.uuid
+              desc: use github.com/google/uuid instead
+            - pkg: github.com/pkg/errors
+              desc: use errors package from stdlib and wrap errors only via fmt.Errorf
+            - pkg: github.com/square/go-jose
+              desc: use github.com/go-jose/go-jose instead
+    dupl:
+      threshold: 100
+    errcheck:
+      check-type-assertions: true
+    funlen:
+      lines: 60
+      statements: 40
+    gocritic:
+      enabled-tags:
+        - diagnostic
+        - style
+        - performance
+        - experimental
+        - opinionated
+    gocyclo:
+      min-complexity: 10
+    govet:
+      disable:
+        - fieldalignment
+      enable-all: true
+    ireturn:
+      allow:
+        - anon
+        - error
+        - empty
+        - stdlib
+    lll:
+      line-length: 140
+      tab-width: 4
+    misspell:
+      locale: US
+      ignore-rules:
+        - cancelled
+    nakedret:
+      max-func-lines: 1
+    prealloc:
+      simple: true
+      range-loops: true
+      for-loops: true
+    tagliatelle:
+      case:
+        rules:
+          avro: snake
+          bson: snake
+          env: upperSnake
+          envconfig: upperSnake
+          json: camel
+          mapstructure: kebab
+          yaml: kebab
+    unused:
+      exported-fields-are-used: false
+      local-variables-are-used: false
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
+    rules:
+      - linters:
+          - funlen
+        path: internal/app/app.go
+      - linters:
+          - funlen
+          - gochecknoglobals
+          - gocyclo
+          - cyclop
+          - lll
+        path: .*_test.go
+      - linters:
+          - lll
+        source: '^//go:generate '
+    paths:
+      - .*\.pb\.go
+      - mock_.*\.go
+      - .+_mock.go
+      - node_modules$
+      - ^.*/?mock$
+      - ^.*/?mocks$
+      - third_party$
+      - builtin$
+      - examples$
+formatters:
+  enable:
+    - gci
+    - gofmt
+    - gofumpt
+    - goimports
+  settings:
+    gci:
+      sections:
+        - standard
+        - default
+        - prefix(github.com/skillcoder)
+        - prefix(github.com/skillcoder/preoomkiller-controller)
+    gofmt:
+      simplify: true
+    goimports:
+      local-prefixes:
+        - github.com/skillcoder
+  exclusions:
+    generated: lax
+    paths:
+      - .*\.pb\.go
+      - .*\.twirp\.go
+      - mock_.*\.go
+      - .+_mock.go
+      - node_modules$
+      - ^.*/?mock$
+      - ^.*/?mocks$
+      - third_party$
+      - builtin$
+      - examples$
