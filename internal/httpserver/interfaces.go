@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/skillcoder/preoomkiller-controller/internal/infra/appstate"
+	"github.com/skillcoder/preoomkiller-controller/internal/infra/pinger"
 )
 
 // appstater is an internal interface for application state management
@@ -13,4 +14,5 @@ type appstater interface {
 	IsReady() bool
 	GetUptime() time.Duration
 	GetStartTime() time.Time
+	GetAllStats() map[string]*pinger.Statistics
 }

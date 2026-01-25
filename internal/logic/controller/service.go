@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -12,12 +13,14 @@ import (
 )
 
 type Service struct {
-	logger     *slog.Logger
-	repo       Repository
-	interval   time.Duration
-	ready      chan struct{}
-	inShutdown atomic.Bool
-	doneCh     chan struct{}
+	logger               *slog.Logger
+	repo                 Repository
+	interval             time.Duration
+	ready                chan struct{}
+	doneCh               chan struct{}
+	inShutdown           atomic.Bool
+	mu                   sync.RWMutex
+	lastReconcileEndTime time.Time
 }
 
 // New creates a new controller service.
@@ -50,6 +53,22 @@ func (s *Service) Start(ctx context.Context) error {
 // Name returns the name of the server component
 func (s *Service) Name() string {
 	return "preoomkiller-controller"
+}
+
+func (s *Service) Ping(ctx context.Context) error {
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-s.ready:
+		lastReconsileAge := s.getLastReconcileAge()
+		if lastReconsileAge > 2*s.interval {
+			return fmt.Errorf("last reconcile was too long ago: %s", lastReconsileAge.Round(time.Second).String())
+		}
+
+		return nil
+	default:
+		return fmt.Errorf("controller service is not ready")
+	}
 }
 
 func (s *Service) Shutdown(ctx context.Context) error {
@@ -214,6 +233,8 @@ func (s *Service) RunCommand(ctx context.Context) {
 			logger.ErrorContext(ctx, "reconcile error", "reason", err)
 		}
 
+		s.setLastReconcileEndTime()
+
 		select {
 		case <-ticker.C:
 		case <-ctx.Done():
@@ -250,4 +271,18 @@ func (s *Service) evictPodCommand(
 	}
 
 	return true, nil
+}
+
+func (s *Service) getLastReconcileAge() time.Duration {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	return time.Since(s.lastReconcileEndTime)
+}
+
+func (s *Service) setLastReconcileEndTime() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	s.lastReconcileEndTime = time.Now()
 }

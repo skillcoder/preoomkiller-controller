@@ -9,6 +9,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/skillcoder/preoomkiller-controller/internal/infra/pinger"
 	"github.com/skillcoder/preoomkiller-controller/internal/infra/shutdown"
 )
 
@@ -32,6 +33,8 @@ const (
 	StateTerminated State = "terminated"
 )
 
+const defaultShutdownersCount = 10
+
 // AppState manages the application state with thread-safe operations
 type AppState struct {
 	mu                  sync.RWMutex
@@ -42,6 +45,8 @@ type AppState struct {
 	state               State
 	quit                <-chan os.Signal
 	terminationFilePath string
+	pinger              pingerServer
+	shutdowners         []shutdown.Shutdowner
 }
 
 // New creates a new AppState with the given start time
@@ -50,6 +55,7 @@ func New(
 	appStart time.Time,
 	terminationFilePath string,
 	quit <-chan os.Signal,
+	pinger pingerServer,
 ) *AppState {
 	return &AppState{
 		logger:              logger,
@@ -57,7 +63,23 @@ func New(
 		state:               StateInit,
 		quit:                quit,
 		terminationFilePath: terminationFilePath,
+		pinger:              pinger,
+		shutdowners:         make([]shutdown.Shutdowner, 0, defaultShutdownersCount),
 	}
+}
+
+func (s *AppState) RegisterPinger(pinger pinger.Pinger) error {
+	return s.pinger.Register(pinger)
+}
+
+func (s *AppState) RegisterShutdowner(shutdowner shutdown.Shutdowner) error {
+	s.shutdowners = append(s.shutdowners, shutdowner)
+
+	return nil
+}
+
+func (s *AppState) GetAllStats() map[string]*pinger.Statistics {
+	return s.pinger.GetAllStats()
 }
 
 // SetStarting transitions the state from Init to Starting
@@ -177,7 +199,16 @@ func (s *AppState) Quit() <-chan os.Signal {
 }
 
 // Shutdown transitions the application to the terminated state
-func (s *AppState) Shutdown(_ context.Context) error {
+func (s *AppState) Shutdown(ctx context.Context) error {
+	if err := s.SetTerminating(ctx); err != nil {
+		return fmt.Errorf("set terminating application state: %w", err)
+	}
+
+	err := shutdown.GracefulShutdown(ctx, s.logger, s.shutdowners)
+	if err != nil {
+		return fmt.Errorf("shutdown: %w", err)
+	}
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
 

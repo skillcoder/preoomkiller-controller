@@ -19,9 +19,7 @@ type statusResponse struct {
 // HandleHealthz returns an http.HandlerFunc for the /-/healthz endpoint
 func HandleHealthz(
 	logger *slog.Logger,
-	appState interface {
-		IsHealthy() bool
-	},
+	appState healthChecker,
 ) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
@@ -43,9 +41,7 @@ func HandleHealthz(
 // HandleReadyz returns an http.HandlerFunc for the /-/readyz endpoint
 func HandleReadyz(
 	logger *slog.Logger,
-	appState interface {
-		IsReady() bool
-	},
+	appState readyChecker,
 ) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
@@ -67,11 +63,7 @@ func HandleReadyz(
 // HandleStatus returns an http.HandlerFunc for the /-/status endpoint
 func HandleStatus(
 	logger *slog.Logger,
-	appState interface {
-		GetState() State
-		GetUptime() time.Duration
-		GetStartTime() time.Time
-	},
+	appState statusGetter,
 ) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()

@@ -18,13 +18,10 @@ import (
 	"github.com/skillcoder/preoomkiller-controller/internal/logic/controller"
 )
 
-const defaultShutdownersCount = 10
-
 type App struct {
 	logger        *slog.Logger
 	signalHandler signalHandler
 	appState      appstater
-	shutdowners   []shutdown.Shutdowner
 	controller    appServer
 	httpServer    appServer
 }
@@ -35,7 +32,6 @@ func New(
 	cfg *config.Config,
 	appState appstater,
 ) (*App, error) {
-	shutdowners := make([]shutdown.Shutdowner, 0, defaultShutdownersCount)
 	// Create K8s config
 	kubeConfig, err := clientcmd.BuildConfigFromFlags(
 		cfg.KubeMaster,
@@ -78,7 +74,6 @@ func New(
 		signalHandler: signalHandler,
 		appState:      appState,
 		httpServer:    httpServer,
-		shutdowners:   shutdowners,
 		logger:        logger,
 	}, nil
 }
@@ -107,7 +102,8 @@ func (a *App) Run(originCtx context.Context) error {
 		return fmt.Errorf("start http server: %w", err)
 	}
 
-	a.shutdowners = append(a.shutdowners, a.httpServer)
+	a.appState.RegisterShutdowner(a.httpServer)
+	a.appState.RegisterPinger(a.httpServer)
 
 	// Start controller in goroutine
 	err = a.controller.Start(ctx)
@@ -115,7 +111,8 @@ func (a *App) Run(originCtx context.Context) error {
 		return fmt.Errorf("start controller: %w", err)
 	}
 
-	a.shutdowners = append(a.shutdowners, a.controller)
+	a.appState.RegisterShutdowner(a.controller)
+	a.appState.RegisterPinger(a.controller)
 
 	// Wait for both httpServer and controller to be ready
 	select {
@@ -133,17 +130,10 @@ func (a *App) Run(originCtx context.Context) error {
 	a.logger.InfoContext(ctx, "starting controller")
 
 	// Wait for shutdown signal, context cancellation, or controller error
-	select {
-	case <-a.appState.Quit():
-		cancel()
-		a.logger.InfoContext(ctx, "shutting down application by signal")
+	<-ctx.Done()
+	a.logger.InfoContext(ctx, "shutting down application by context")
 
-		return a.Shutdown(ctx)
-	case <-ctx.Done():
-		a.logger.InfoContext(ctx, "shutting down application by context")
-
-		return a.Shutdown(ctx)
-	}
+	return a.Shutdown(ctx)
 }
 
 // allChannelsClose waits for all provided channels to close/signal and returns
@@ -188,6 +178,6 @@ func allChannelsClose(ctx context.Context, logger *slog.Logger, cs ...<-chan str
 }
 
 // Shutdown gracefully shuts down the application
-func (a *App) Shutdown(originCtx context.Context) error {
-	return shutdown.GracefulShutdown(originCtx, a.logger, a.appState, a.shutdowners)
+func (a *App) Shutdown(ctx context.Context) error {
+	return a.appState.Shutdown(ctx)
 }

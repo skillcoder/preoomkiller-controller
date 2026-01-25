@@ -92,15 +92,8 @@ func CheckTerminationFile(ctx context.Context, logger *slog.Logger, terminationF
 func GracefulShutdown(
 	originCtx context.Context,
 	logger *slog.Logger,
-	appState appstater,
 	shutdowners []Shutdowner,
 ) error {
-	if err := appState.SetTerminating(originCtx); err != nil {
-		logger.ErrorContext(originCtx, "failed to set terminating state", "reason", err)
-
-		return fmt.Errorf("set terminating application state: %w", err)
-	}
-
 	// Use context.WithoutCancel to ensure shutdown continues even if originCtx is cancelled
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(originCtx), defaultShutdownTimeout)
 	defer cancel()
@@ -132,12 +125,6 @@ func GracefulShutdown(
 	}
 
 	close(componentsShutdownErrors)
-
-	// Final app state shutdown
-	err := appState.Shutdown(ctx)
-	if err != nil {
-		return fmt.Errorf("shutdown application state: %w", err)
-	}
 
 	var errs error
 	// collect errors from components

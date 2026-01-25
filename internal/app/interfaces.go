@@ -6,11 +6,15 @@ import (
 	"time"
 
 	"github.com/skillcoder/preoomkiller-controller/internal/infra/appstate"
+	"github.com/skillcoder/preoomkiller-controller/internal/infra/pinger"
 	"github.com/skillcoder/preoomkiller-controller/internal/infra/shutdown"
 )
 
 // appstater defines the interface for application state management
 type appstater interface {
+	RegisterPinger(pinger pinger.Pinger) error
+	GetAllStats() map[string]*pinger.Statistics
+	RegisterShutdowner(shutdowner shutdown.Shutdowner) error
 	Quit() <-chan os.Signal
 	SetStarting(ctx context.Context) error
 	SetRunning(ctx context.Context) error
@@ -29,6 +33,7 @@ type signalHandler interface {
 }
 
 type appServer interface {
+	pinger.Pinger
 	Start(ctx context.Context) error
 	Ready() <-chan struct{}
 	shutdown.Shutdowner

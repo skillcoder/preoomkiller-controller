@@ -45,6 +45,17 @@ func (s *Server) Name() string {
 	return "http-server"
 }
 
+func (s *Server) Ping(ctx context.Context) error {
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-s.ready:
+		return nil
+	default:
+		return fmt.Errorf("http server is not ready")
+	}
+}
+
 // Start starts the HTTP server in a goroutine
 func (s *Server) Start(ctx context.Context) error {
 	if s.inShutdown.Load() {

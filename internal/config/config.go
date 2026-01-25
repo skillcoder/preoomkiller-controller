@@ -8,12 +8,13 @@ import (
 )
 
 type Config struct {
-	KubeConfig string
-	KubeMaster string
-	Interval   time.Duration
-	LogLevel   string
-	LogFormat  string
-	HTTPPort   string
+	KubeConfig     string
+	KubeMaster     string
+	Interval       time.Duration
+	PingerInterval time.Duration
+	LogLevel       string
+	LogFormat      string
+	HTTPPort       string
 }
 
 func Load() (*Config, error) {
@@ -24,6 +25,14 @@ func Load() (*Config, error) {
 		LogFormat:  getEnvOrDefault("LOG_FORMAT", "json"),
 		HTTPPort:   getEnvOrDefault("HTTP_PORT", "8080"),
 	}
+
+	pingerIntervalStr := getEnvOrDefault("PINGER_INTERVAL", "10")
+	pingerInterval, err := strconv.Atoi(pingerIntervalStr)
+	if err != nil {
+		return nil, fmt.Errorf("parse pinger interval: %w", err)
+	}
+
+	cfg.PingerInterval = time.Duration(pingerInterval) * time.Second
 
 	intervalStr := getEnvOrDefault("INTERVAL", "300")
 

@@ -11,6 +11,7 @@ import (
 	"github.com/skillcoder/preoomkiller-controller/internal/config"
 	"github.com/skillcoder/preoomkiller-controller/internal/infra/appstate"
 	"github.com/skillcoder/preoomkiller-controller/internal/infra/logging"
+	"github.com/skillcoder/preoomkiller-controller/internal/infra/pinger"
 	"github.com/skillcoder/preoomkiller-controller/internal/infra/shutdown"
 )
 
@@ -38,7 +39,8 @@ func run(ctx context.Context, signals <-chan os.Signal, appStart time.Time) erro
 	}
 
 	logger := logging.New(cfg.LogFormat, cfg.LogLevel)
-	appState := appstate.New(logger, appStart, "/mnt/signal/terminating", signals)
+	pingers := pinger.New(logger, cfg.PingerInterval)
+	appState := appstate.New(logger, appStart, "/mnt/signal/terminating", signals, pingers)
 
 	application, err := app.New(logger, cfg, appState)
 	if err != nil {
