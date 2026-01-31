@@ -1,0 +1,16 @@
+# Memory-leaker example: build and push to Docker Hub.
+# Uses BuildKit (buildx) for multi-platform builds. Run `just docker-login` once before push.
+
+default: container
+
+# Log in to Docker Hub (run once; prompts for credentials)
+docker-login:
+	docker login
+
+# Build multi-platform image (amd64 + arm64) and push. Uses BuildKit. Usage: just container TAG="0.1.0"
+container TAG="0.1.0":
+	docker buildx build --platform linux/amd64,linux/arm64 -t skillc0der/memory-leaker:{{TAG}} --load -f Dockerfile .
+
+# Build image for current platform only (for local run). Usage: just container-local TAG="0.1.0"
+release TAG="0.1.0":
+	docker buildx build --platform linux/amd64,linux/arm64 -t skillc0der/memory-leaker:{{TAG}} --push -f Dockerfile .

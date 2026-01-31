@@ -1,0 +1,65 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app.kubernetes.io/name: memory-leaker
+    app.kubernetes.io/component: example
+  name: memory-leaker
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: memory-leaker
+      app.kubernetes.io/component: example
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: memory-leaker
+        app.kubernetes.io/component: example
+        preoomkiller.beta.k8s.skillcoder.com/enabled: "true"
+      annotations:
+        preoomkiller.beta.k8s.skillcoder.com/memory-threshold: "50Mi"
+    spec:
+      containers:
+      - name: memory-leaker
+        image: skillc0der/memory-leaker:changeinkustomizeyaml
+        imagePullPolicy: IfNotPresent
+        env:
+        - name: LEAK_RATE_MI_PER_MIN
+          value: "10"
+        ports:
+        - containerPort: 8080
+          name: http
+          protocol: TCP
+        resources:
+          requests:
+            cpu: 10m
+            memory: 45Mi
+          limits:
+            cpu: 50m
+            memory: 140Mi
+        startupProbe:
+          httpGet:
+            path: /healthz
+            port: 8080
+          initialDelaySeconds: 2
+          periodSeconds: 2
+          timeoutSeconds: 1
+          failureThreshold: 10
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          timeoutSeconds: 1
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /healthz
+            port: 8080
+          initialDelaySeconds: 2
+          periodSeconds: 5
+          timeoutSeconds: 1
+          failureThreshold: 1
+      restartPolicy: Always
