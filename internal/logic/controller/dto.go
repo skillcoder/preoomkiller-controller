@@ -7,6 +7,8 @@ type Pod struct {
 	Name        string
 	Namespace   string
 	Annotations map[string]string
+	// MemoryLimit is the sum of all container memory limits; nil when no container sets a limit.
+	MemoryLimit *resource.Quantity
 }
 
 // PodMetrics represents pod metrics in the domain layer.

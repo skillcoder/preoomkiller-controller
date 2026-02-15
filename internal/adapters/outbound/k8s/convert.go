@@ -12,11 +12,28 @@ import (
 )
 
 func toDomainPod(pod *corev1.Pod) controller.Pod {
-	return controller.Pod{
+	out := controller.Pod{
 		Name:        pod.Name,
 		Namespace:   pod.Namespace,
 		Annotations: pod.Annotations,
 	}
+
+	totalLimit := resource.NewQuantity(0, resource.BinarySI)
+	hasLimit := false
+
+	for i := range pod.Spec.Containers {
+		if limit, ok := pod.Spec.Containers[i].Resources.Limits[corev1.ResourceMemory]; ok {
+			totalLimit.Add(limit)
+
+			hasLimit = true
+		}
+	}
+
+	if hasLimit {
+		out.MemoryLimit = totalLimit
+	}
+
+	return out
 }
 
 func toDomainPodMetrics(

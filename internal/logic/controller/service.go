@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -151,6 +153,115 @@ func (s *Service) ReconcileCommand(ctx context.Context) error {
 	return nil
 }
 
+// resolveMemoryThreshold returns the effective memory threshold from the pod annotation.
+// The annotation may be an absolute quantity (e.g. "512Mi") or a percentage of the pod's memory limit (e.g. "80%").
+// Returns ErrMemoryLimitNotDefined when the annotation is a percentage but the pod has no memory limit (caller should skip eviction).
+func resolveMemoryThreshold(
+	ctx context.Context,
+	logger *slog.Logger,
+	pod Pod,
+) (resource.Quantity, error) {
+	annotationKey := PreoomkillerAnnotationMemoryThresholdKey
+
+	memoryThresholdStr, ok := pod.Annotations[annotationKey]
+	if !ok {
+		return resource.Quantity{}, fmt.Errorf(
+			"%w: annotation %s not found",
+			ErrMemoryThresholdParse,
+			annotationKey,
+		)
+	}
+
+	logger = logger.With(
+		"annotationKey", annotationKey,
+		"annotationValue", memoryThresholdStr,
+	)
+
+	if before, ok0 := strings.CutSuffix(memoryThresholdStr, "%"); ok0 {
+		return resolveMemoryThresholdFromPercent(ctx, logger, strings.TrimSpace(before), pod.MemoryLimit)
+	}
+
+	// Absolute quantity
+	threshold, err := resource.ParseQuantity(memoryThresholdStr)
+	if err != nil {
+		return resource.Quantity{}, fmt.Errorf("%w: %w", ErrMemoryThresholdParse, err)
+	}
+
+	logger.DebugContext(ctx, "resolved absolute threshold",
+		"memoryThreshold", threshold.String(),
+	)
+
+	return threshold, nil
+}
+
+// resolveMemoryThresholdFromPercent interprets percentStr as a percentage of the memory limit
+// and returns the corresponding absolute threshold.
+func resolveMemoryThresholdFromPercent(
+	ctx context.Context,
+	logger *slog.Logger,
+	percentStr string,
+	memoryLimit *resource.Quantity,
+) (resource.Quantity, error) {
+	percent, err := strconv.ParseFloat(percentStr, 64)
+	if err != nil {
+		return resource.Quantity{}, fmt.Errorf("%w: invalid percentage %q: %w", ErrMemoryThresholdParse, percentStr, err)
+	}
+
+	if percent <= 0 || percent > 100 {
+		return resource.Quantity{}, fmt.Errorf("%w: percentage must be in (0, 100], got %q",
+			ErrMemoryThresholdParse, percentStr,
+		)
+	}
+
+	if memoryLimit == nil || memoryLimit.IsZero() {
+		logger.WarnContext(ctx, "memory threshold is percentage but pod has no memory limit, skipping eviction",
+			"memoryLimitSet", false,
+		)
+
+		return resource.Quantity{}, ErrMemoryLimitNotDefined
+	}
+
+	limitFloat := memoryLimit.AsApproximateFloat64()
+	thresholdFloat := limitFloat * (percent / percentScale)
+	threshold := resource.NewQuantity(int64(thresholdFloat), resource.BinarySI)
+
+	logger.DebugContext(ctx, "resolved percentage threshold",
+		"memoryLimit", memoryLimit.String(),
+		"memoryThreshold", threshold.String(),
+	)
+
+	return *threshold, nil
+}
+
+// getPodMemoryUsageOrSkip fetches pod metrics; skip is true when the pod should be skipped (e.g. not found, no metrics).
+func (s *Service) getPodMemoryUsageOrSkip(ctx context.Context, logger *slog.Logger, pod Pod) (resource.Quantity, bool, error) {
+	podMetrics, err := s.repo.GetPodMetricsQuery(ctx, pod.Namespace, pod.Name)
+	if err != nil {
+		var target notFound
+		if errors.As(err, &target) {
+			logger.WarnContext(ctx, "pod metrics not found, skipping")
+
+			return resource.Quantity{}, true, nil
+		}
+
+		return resource.Quantity{}, false, fmt.Errorf("%w: %w", ErrGetPodMetrics, err)
+	}
+
+	if podMetrics.MemoryUsage == nil {
+		logger.WarnContext(ctx, "pod memory usage is nil, skipping")
+
+		return resource.Quantity{}, true, nil
+	}
+
+	if podMetrics.MemoryUsage.IsZero() {
+		logger.WarnContext(ctx, "pod memory usage is zero, skipping")
+
+		return resource.Quantity{}, true, nil
+	}
+
+	return *podMetrics.MemoryUsage, false, nil
+}
+
 func (s *Service) processPod(
 	ctx context.Context,
 	logger *slog.Logger,
@@ -158,52 +269,48 @@ func (s *Service) processPod(
 ) (bool, error) {
 	logger = logger.With("pod", pod.Name, "namespace", pod.Namespace, "controller", "processPod")
 
-	memoryThresholdStr, ok := pod.Annotations[PreoomkillerAnnotationMemoryThresholdKey]
-	if !ok {
-		return false, fmt.Errorf(
-			"%w: annotation %s not found",
-			ErrMemoryThresholdParse,
-			PreoomkillerAnnotationMemoryThresholdKey,
-		)
-	}
-
-	podMemoryThreshold, err := resource.ParseQuantity(memoryThresholdStr)
+	podMemoryThreshold, err := resolveMemoryThreshold(ctx, logger, pod)
 	if err != nil {
-		return false, fmt.Errorf("%w: %w", ErrMemoryThresholdParse, err)
+		if errors.Is(err, ErrMemoryLimitNotDefined) {
+			return false, nil
+		}
+
+		return false, err
 	}
 
 	logger = logger.With("memoryThreshold", podMemoryThreshold.String())
 
-	logger.DebugContext(ctx, "processing pod")
-
-	podMetrics, err := s.repo.GetPodMetricsQuery(ctx, pod.Namespace, pod.Name)
-	if err != nil {
-		var target notFound
-		if errors.As(err, &target) {
-			logger.WarnContext(ctx, "pod metrics not found, skipping")
-
-			return false, nil
-		}
-
-		return false, fmt.Errorf("%w: %w", ErrGetPodMetrics, err)
+	if pod.MemoryLimit != nil {
+		logger = logger.With("memoryLimit", pod.MemoryLimit.String())
 	}
 
-	if podMetrics.MemoryUsage == nil {
-		logger.WarnContext(ctx, "pod memory usage is nil, skipping")
+	if podMemoryThreshold.IsZero() {
+		logger.WarnContext(ctx, "memory threshold is zero, skipping")
 
 		return false, nil
 	}
 
-	logger.DebugContext(ctx, "pod memory usage", "memoryUsage", podMetrics.MemoryUsage.String())
+	logger.DebugContext(ctx, "processing pod")
 
-	if podMetrics.MemoryUsage.Cmp(podMemoryThreshold) == 1 {
+	podMemoryUsage, skip, err := s.getPodMemoryUsageOrSkip(ctx, logger, pod)
+	if skip {
+		return false, nil
+	}
+
+	if err != nil {
+		return false, err
+	}
+
+	logger.DebugContext(ctx, "pod memory usage", "memoryUsage", podMemoryUsage.String())
+
+	if podMemoryUsage.Cmp(podMemoryThreshold) == 1 {
 		ok, err := s.evictPodCommand(ctx, logger, pod.Name, pod.Namespace)
 		if err != nil {
 			return false, fmt.Errorf("%w: %w", ErrEvictPod, err)
 		}
 
 		if ok {
-			logger.InfoContext(ctx, "pod evicted", "memoryUsage", podMetrics.MemoryUsage.String())
+			logger.InfoContext(ctx, "pod evicted", "memoryUsage", podMemoryUsage.String())
 
 			return true, nil
 		}
