@@ -11,6 +11,7 @@ rules:
   - get
   - watch
   - list
+  - patch
 - apiGroups:
   - metrics.k8s.io
   resources:

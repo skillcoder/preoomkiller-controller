@@ -14,6 +14,7 @@ import (
 	"github.com/skillcoder/preoomkiller-controller/internal/adapters/outbound/k8s"
 	"github.com/skillcoder/preoomkiller-controller/internal/config"
 	"github.com/skillcoder/preoomkiller-controller/internal/httpserver"
+	"github.com/skillcoder/preoomkiller-controller/internal/infra/cronparser"
 	"github.com/skillcoder/preoomkiller-controller/internal/infra/shutdown"
 	"github.com/skillcoder/preoomkiller-controller/internal/logic/controller"
 )
@@ -56,13 +57,20 @@ func New(
 	// Create secondary adapter (K8s adapter)
 	k8sRepo := k8s.New(logger, clientset, metricsClientset)
 
+	cronParser := cronparser.New()
+
 	// Create logic service (inject repository adapter)
 	controllerService := controller.New(
 		logger,
 		k8sRepo,
+		cronParser,
 		cfg.Interval,
 		cfg.PodLabelSelector,
 		cfg.AnnotationMemoryThresholdKey,
+		cfg.AnnotationRestartScheduleKey,
+		cfg.AnnotationTZKey,
+		controller.PreoomkillerAnnotationRestartAtKey,
+		cfg.RestartScheduleJitterMax,
 	)
 
 	// Create HTTP server

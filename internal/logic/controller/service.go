@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"math/rand"
 	"strconv"
 	"strings"
 	"sync"
@@ -17,32 +18,51 @@ import (
 type Service struct {
 	logger                       *slog.Logger
 	repo                         Repository
+	scheduleParser               scheduleParser
 	interval                     time.Duration
 	labelSelector                string
 	annotationMemoryThresholdKey string
+	annotationRestartScheduleKey string
+	annotationTZKey              string
+	annotationRestartAtKey       string
+	jitterMax                    time.Duration
 	ready                        chan struct{}
 	doneCh                       chan struct{}
 	inShutdown                   atomic.Bool
 	mu                           sync.RWMutex
 	lastReconcileEndTime         time.Time
+	timerMu                      sync.Mutex
+	pendingTimers                map[string]*time.Timer
+	inFlightWg                   sync.WaitGroup
 }
 
 // New creates a new controller service.
 func New(
 	logger *slog.Logger,
 	repo Repository,
+	parser scheduleParser,
 	interval time.Duration,
 	labelSelector string,
 	annotationMemoryThresholdKey string,
+	annotationRestartScheduleKey string,
+	annotationTZKey string,
+	annotationRestartAtKey string,
+	jitterMax time.Duration,
 ) *Service {
 	return &Service{
 		logger:                       logger,
 		repo:                         repo,
+		scheduleParser:               parser,
 		interval:                     interval,
 		labelSelector:                labelSelector,
 		annotationMemoryThresholdKey: annotationMemoryThresholdKey,
+		annotationRestartScheduleKey: annotationRestartScheduleKey,
+		annotationTZKey:              annotationTZKey,
+		annotationRestartAtKey:       annotationRestartAtKey,
+		jitterMax:                    jitterMax,
 		ready:                        make(chan struct{}),
 		doneCh:                       make(chan struct{}),
+		pendingTimers:                make(map[string]*time.Timer, _defaultPendingTimersCapacity),
 	}
 }
 
@@ -83,7 +103,7 @@ func (s *Service) Shutdown(ctx context.Context) error {
 	if !s.inShutdown.CompareAndSwap(false, true) {
 		s.logger.ErrorContext(ctx, "controller service is already shutting down, skipping shutdown")
 
-		return nil // Already shutting down
+		return nil
 	}
 
 	defer func() {
@@ -92,8 +112,8 @@ func (s *Service) Shutdown(ctx context.Context) error {
 
 	s.logger.InfoContext(ctx, "shutting down controller service")
 
-	// Wait for RunCommand to exit, respecting shutdown context
-	// RunCommand will exit when ctx.Done() is triggered (context cancellation)
+	s.stopPendingTimers()
+
 	select {
 	case <-ctx.Done():
 		return fmt.Errorf("shutdown context done before controller loop exited: %w", ctx.Err())
@@ -101,7 +121,230 @@ func (s *Service) Shutdown(ctx context.Context) error {
 		s.logger.InfoContext(ctx, "controller loop exited")
 	}
 
+	done := make(chan struct{})
+
+	go func() {
+		s.inFlightWg.Wait()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		s.logger.InfoContext(ctx, "all scheduled evictions finished")
+	case <-ctx.Done():
+		return fmt.Errorf("shutdown wait for evictions: %w", ctx.Err())
+	}
+
 	return nil
+}
+
+func (s *Service) stopPendingTimers() {
+	s.timerMu.Lock()
+	defer s.timerMu.Unlock()
+
+	for key, timer := range s.pendingTimers {
+		if timer.Stop() {
+			s.inFlightWg.Done()
+		}
+
+		delete(s.pendingTimers, key)
+	}
+}
+
+func (s *Service) processScheduledRestart(
+	ctx context.Context,
+	logger *slog.Logger,
+	pod Pod,
+) {
+	logger = logger.With("pod", pod.Name, "namespace", pod.Namespace)
+
+	restartAtStr, hasRestartAt := pod.Annotations[s.annotationRestartAtKey]
+	if hasRestartAt {
+		if s.handleExistingRestartAt(ctx, logger, pod, restartAtStr) {
+			return
+		}
+	}
+
+	spec := pod.Annotations[s.annotationRestartScheduleKey]
+	tz := pod.Annotations[s.annotationTZKey]
+
+	nextRun, err := s.scheduleParser.NextAfter(spec, tz, time.Now())
+	if err != nil {
+		logger.WarnContext(ctx, "invalid restart schedule",
+			"spec", spec,
+			"tz", tz,
+			"reason", err,
+		)
+
+		return
+	}
+
+	restartAtValue := nextRun.Format(time.RFC3339)
+
+	if err := s.repo.SetAnnotationCommand(
+		ctx,
+		pod.Namespace,
+		pod.Name,
+		s.annotationRestartAtKey,
+		restartAtValue,
+	); err != nil {
+		logger.ErrorContext(ctx, "set restart-at annotation",
+			"reason", err,
+		)
+
+		return
+	}
+
+	s.scheduleEviction(ctx, logger, pod.Namespace, pod.Name, nextRun)
+}
+
+func (s *Service) handleExistingRestartAt(
+	ctx context.Context,
+	logger *slog.Logger,
+	pod Pod,
+	restartAtStr string,
+) bool {
+	restartAt, err := time.Parse(time.RFC3339, restartAtStr)
+	if err != nil {
+		logger.WarnContext(ctx, "invalid restart-at annotation",
+			"restartAt", restartAtStr,
+			"reason", err,
+		)
+
+		return false
+	}
+
+	now := time.Now()
+
+	if restartAt.After(now) {
+		logger.DebugContext(ctx, "recovering scheduled eviction",
+			"restartAt", restartAtStr,
+		)
+		s.scheduleEviction(ctx, logger, pod.Namespace, pod.Name, restartAt)
+
+		return true
+	}
+
+	if pod.CreatedAt.Before(restartAt) {
+		logger.InfoContext(ctx, "missed scheduled eviction, evicting now",
+			"restartAt", restartAtStr,
+			"podCreatedAt", pod.CreatedAt.Format(time.RFC3339),
+		)
+
+		ok, evictErr := s.evictPodCommand(ctx, logger, pod.Name, pod.Namespace)
+		if evictErr != nil {
+			logger.ErrorContext(ctx, "missed eviction failed",
+				"reason", evictErr,
+			)
+		}
+
+		if ok {
+			logger.InfoContext(ctx, "pod evicted (missed schedule)")
+		}
+
+		return true
+	}
+
+	logger.WarnContext(ctx, "stale restart-at annotation, rescheduling",
+		"restartAt", restartAtStr,
+		"podCreatedAt", pod.CreatedAt.Format(time.RFC3339),
+	)
+
+	return false
+}
+
+const (
+	_defaultPendingTimersCapacity = 16
+	_evictionTimeout              = 90 * time.Second
+)
+
+func (s *Service) scheduleEviction(
+	ctx context.Context,
+	logger *slog.Logger,
+	namespace,
+	name string,
+	at time.Time,
+) {
+	if s.inShutdown.Load() {
+		return
+	}
+
+	key := namespace + "/" + name
+
+	s.timerMu.Lock()
+	defer s.timerMu.Unlock()
+
+	if _, exists := s.pendingTimers[key]; exists {
+		return
+	}
+
+	delay := max(time.Until(at), 0)
+
+	// Jitter does not require cryptographic randomness.
+	// #nosec G404
+	jitter := time.Duration(rand.Int63n(int64(s.jitterMax + 1)))
+
+	s.inFlightWg.Add(1)
+
+	// Callback runs asynchronously; passing ctx would be incorrect (it may be cancelled by then).
+	//nolint:contextcheck // runScheduledEviction uses context.Background() for the eviction call.
+	timer := time.AfterFunc(delay+jitter, func() {
+		s.runScheduledEviction(logger, key, namespace, name)
+	})
+
+	s.pendingTimers[key] = timer
+
+	logger.DebugContext(ctx, "scheduled eviction goroutine",
+		"pod", name,
+		"namespace", namespace,
+		"at", at.Format(time.RFC3339),
+		"delay", delay+jitter,
+	)
+}
+
+func (s *Service) runScheduledEviction(
+	logger *slog.Logger,
+	key,
+	namespace,
+	name string,
+) {
+	defer s.inFlightWg.Done()
+
+	if s.inShutdown.Load() {
+		s.timerMu.Lock()
+		delete(s.pendingTimers, key)
+		s.timerMu.Unlock()
+
+		return
+	}
+
+	evictCtx, cancel := context.WithTimeout(context.Background(), _evictionTimeout)
+	defer cancel()
+
+	logger.InfoContext(evictCtx, "executing scheduled eviction",
+		"pod", name,
+		"namespace", namespace,
+	)
+
+	ok, err := s.evictPodCommand(evictCtx, logger, name, namespace)
+	if err != nil {
+		logger.ErrorContext(evictCtx, "scheduled eviction failed",
+			"pod", name,
+			"namespace", namespace,
+			"reason", err,
+		)
+	}
+
+	if ok {
+		logger.InfoContext(evictCtx, "pod evicted by schedule",
+			"pod", name,
+			"namespace", namespace,
+		)
+	}
+
+	s.timerMu.Lock()
+	delete(s.pendingTimers, key)
+	s.timerMu.Unlock()
 }
 
 // ReconcileCommand runs one iteration of the reconciliation loop.
@@ -118,27 +361,8 @@ func (s *Service) ReconcileCommand(ctx context.Context) error {
 	evictedCount := 0
 
 	for i := range pods {
-		select {
-		case <-ctx.Done():
-			logger.InfoContext(ctx, "context done, stopping reconciliation")
-
+		if done := s.reconcileOnePod(ctx, logger, pods[i], &evictedCount); done {
 			return nil
-		default:
-		}
-
-		evicted, err := s.processPod(ctx, logger, pods[i])
-		if err != nil {
-			logger.ErrorContext(ctx, "process pod error",
-				"pod", pods[i].Name,
-				"namespace", pods[i].Namespace,
-				"reason", err,
-			)
-
-			continue
-		}
-
-		if evicted {
-			evictedCount++
 		}
 
 		select {
@@ -146,7 +370,6 @@ func (s *Service) ReconcileCommand(ctx context.Context) error {
 			logger.InfoContext(ctx, "context done, stopping reconciliation")
 
 			return nil
-		// small delay to avoid overwhelming the API server
 		case <-time.After(1 * time.Second):
 		}
 	}
@@ -154,6 +377,45 @@ func (s *Service) ReconcileCommand(ctx context.Context) error {
 	logger.InfoContext(ctx, "pods evicted", "count", len(pods), "evicted", evictedCount)
 
 	return nil
+}
+
+// reconcileOnePod processes one pod (schedule-based and memory-threshold). Returns true if context is done.
+func (s *Service) reconcileOnePod(
+	ctx context.Context,
+	logger *slog.Logger,
+	pod Pod,
+	evictedCount *int,
+) bool {
+	select {
+	case <-ctx.Done():
+		logger.InfoContext(ctx, "context done, stopping reconciliation")
+
+		return true
+	default:
+	}
+
+	if _, hasSchedule := pod.Annotations[s.annotationRestartScheduleKey]; hasSchedule {
+		s.processScheduledRestart(ctx, logger, pod)
+	}
+
+	if _, hasThreshold := pod.Annotations[s.annotationMemoryThresholdKey]; hasThreshold {
+		evicted, err := s.processPod(ctx, logger, pod)
+		if err != nil {
+			logger.ErrorContext(ctx, "process pod error",
+				"pod", pod.Name,
+				"namespace", pod.Namespace,
+				"reason", err,
+			)
+
+			return false
+		}
+
+		if evicted {
+			*evictedCount++
+		}
+	}
+
+	return false
 }
 
 // resolveMemoryThreshold returns the effective memory threshold from the pod annotation.

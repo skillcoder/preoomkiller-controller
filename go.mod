@@ -4,6 +4,7 @@ go 1.25
 
 require (
 	github.com/go-chi/chi/v5 v5.2.4
+	github.com/netresearch/go-cron v0.11.0
 	github.com/stretchr/testify v1.10.0
 	k8s.io/api v0.33.7
 	k8s.io/apimachinery v0.33.7

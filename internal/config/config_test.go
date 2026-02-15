@@ -51,6 +51,18 @@ func assertConfigFields(t *testing.T, got, want *config.Config) {
 	if want.AnnotationMemoryThresholdKey != "" {
 		require.Equal(t, want.AnnotationMemoryThresholdKey, got.AnnotationMemoryThresholdKey)
 	}
+
+	if want.AnnotationRestartScheduleKey != "" {
+		require.Equal(t, want.AnnotationRestartScheduleKey, got.AnnotationRestartScheduleKey)
+	}
+
+	if want.AnnotationTZKey != "" {
+		require.Equal(t, want.AnnotationTZKey, got.AnnotationTZKey)
+	}
+
+	if want.RestartScheduleJitterMax != 0 {
+		require.Equal(t, want.RestartScheduleJitterMax, got.RestartScheduleJitterMax)
+	}
 }
 
 func TestLoad(t *testing.T) {
@@ -68,6 +80,9 @@ func TestLoad(t *testing.T) {
 				HTTPPort:                     "8080",
 				PodLabelSelector:             controller.PreoomkillerPodLabelSelector,
 				AnnotationMemoryThresholdKey: controller.PreoomkillerAnnotationMemoryThresholdKey,
+				AnnotationRestartScheduleKey: controller.PreoomkillerAnnotationRestartScheduleKey,
+				AnnotationTZKey:              controller.PreoomkillerAnnotationTZKey,
+				RestartScheduleJitterMax:     30 * time.Second,
 				Interval:                     300 * time.Second,
 				PingerInterval:               10 * time.Second,
 			},
@@ -107,6 +122,15 @@ func TestLoad(t *testing.T) {
 			name: "invalid PINGER_INTERVAL",
 			giveEnv: map[string]string{
 				"PINGER_INTERVAL": "not-a-number",
+			},
+			wantErr: true,
+		},
+		{
+			name: "invalid PREOOMKILLER_RESTART_SCHEDULE_JITTER_MAX",
+			giveEnv: map[string]string{
+				"INTERVAL":        "300",
+				"PINGER_INTERVAL": "10",
+				"PREOOMKILLER_RESTART_SCHEDULE_JITTER_MAX": "x",
 			},
 			wantErr: true,
 		},

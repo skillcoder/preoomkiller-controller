@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"k8s.io/apimachinery/pkg/api/resource"
 
+	"github.com/skillcoder/preoomkiller-controller/internal/infra/cronparser"
 	"github.com/skillcoder/preoomkiller-controller/internal/logic/controller"
 	"github.com/skillcoder/preoomkiller-controller/internal/logic/controller/mocks"
 )
@@ -46,9 +47,14 @@ func TestService_ReconcileCommand(t *testing.T) {
 		svc := controller.New(
 			logger,
 			repo,
+			cronparser.New(),
 			1*time.Second,
 			"label",
 			controller.PreoomkillerAnnotationMemoryThresholdKey,
+			controller.PreoomkillerAnnotationRestartScheduleKey,
+			controller.PreoomkillerAnnotationTZKey,
+			controller.PreoomkillerAnnotationRestartAtKey,
+			30*time.Second,
 		)
 
 		repo.EXPECT().
@@ -67,9 +73,14 @@ func TestService_ReconcileCommand(t *testing.T) {
 		svc := controller.New(
 			logger,
 			repo,
+			cronparser.New(),
 			1*time.Second,
 			"label",
 			controller.PreoomkillerAnnotationMemoryThresholdKey,
+			controller.PreoomkillerAnnotationRestartScheduleKey,
+			controller.PreoomkillerAnnotationTZKey,
+			controller.PreoomkillerAnnotationRestartAtKey,
+			30*time.Second,
 		)
 
 		repo.EXPECT().
@@ -88,9 +99,14 @@ func TestService_ReconcileCommand(t *testing.T) {
 		svc := controller.New(
 			logger,
 			repo,
+			cronparser.New(),
 			1*time.Second,
 			"label",
 			controller.PreoomkillerAnnotationMemoryThresholdKey,
+			controller.PreoomkillerAnnotationRestartScheduleKey,
+			controller.PreoomkillerAnnotationTZKey,
+			controller.PreoomkillerAnnotationRestartAtKey,
+			30*time.Second,
 		)
 
 		pod := controller.Pod{
@@ -126,9 +142,14 @@ func TestService_ReconcileCommand(t *testing.T) {
 		svc := controller.New(
 			logger,
 			repo,
+			cronparser.New(),
 			1*time.Second,
 			"label",
 			controller.PreoomkillerAnnotationMemoryThresholdKey,
+			controller.PreoomkillerAnnotationRestartScheduleKey,
+			controller.PreoomkillerAnnotationTZKey,
+			controller.PreoomkillerAnnotationRestartAtKey,
+			30*time.Second,
 		)
 
 		pod := controller.Pod{
@@ -164,9 +185,14 @@ func TestService_ReconcileCommand(t *testing.T) {
 		svc := controller.New(
 			logger,
 			repo,
+			cronparser.New(),
 			1*time.Second,
 			"label",
 			controller.PreoomkillerAnnotationMemoryThresholdKey,
+			controller.PreoomkillerAnnotationRestartScheduleKey,
+			controller.PreoomkillerAnnotationTZKey,
+			controller.PreoomkillerAnnotationRestartAtKey,
+			30*time.Second,
 		)
 
 		pod := controller.Pod{
@@ -200,9 +226,14 @@ func TestService_Start_Ready_Shutdown(t *testing.T) {
 	svc := controller.New(
 		logger,
 		repo,
+		cronparser.New(),
 		10*time.Second,
 		"",
 		controller.PreoomkillerAnnotationMemoryThresholdKey,
+		controller.PreoomkillerAnnotationRestartScheduleKey,
+		controller.PreoomkillerAnnotationTZKey,
+		controller.PreoomkillerAnnotationRestartAtKey,
+		30*time.Second,
 	)
 
 	repo.EXPECT().
@@ -241,9 +272,14 @@ func TestService_Ping(t *testing.T) {
 		svc := controller.New(
 			logger,
 			repo,
+			cronparser.New(),
 			10*time.Second,
 			"",
 			controller.PreoomkillerAnnotationMemoryThresholdKey,
+			controller.PreoomkillerAnnotationRestartScheduleKey,
+			controller.PreoomkillerAnnotationTZKey,
+			controller.PreoomkillerAnnotationRestartAtKey,
+			30*time.Second,
 		)
 
 		err := svc.Ping(t.Context())
@@ -257,9 +293,14 @@ func TestService_Ping(t *testing.T) {
 		svc := controller.New(
 			logger,
 			repo,
+			cronparser.New(),
 			10*time.Second,
 			"",
 			controller.PreoomkillerAnnotationMemoryThresholdKey,
+			controller.PreoomkillerAnnotationRestartScheduleKey,
+			controller.PreoomkillerAnnotationTZKey,
+			controller.PreoomkillerAnnotationRestartAtKey,
+			30*time.Second,
 		)
 
 		repo.EXPECT().

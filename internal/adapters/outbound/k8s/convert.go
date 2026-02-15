@@ -16,6 +16,7 @@ func toDomainPod(pod *corev1.Pod) controller.Pod {
 		Name:        pod.Name,
 		Namespace:   pod.Namespace,
 		Annotations: pod.Annotations,
+		CreatedAt:   pod.CreationTimestamp.Time,
 	}
 
 	totalLimit := resource.NewQuantity(0, resource.BinarySI)

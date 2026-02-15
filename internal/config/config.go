@@ -19,6 +19,9 @@ type Config struct {
 	HTTPPort                     string
 	PodLabelSelector             string
 	AnnotationMemoryThresholdKey string
+	AnnotationRestartScheduleKey string
+	AnnotationTZKey              string
+	RestartScheduleJitterMax     time.Duration
 }
 
 func Load() (*Config, error) {
@@ -32,6 +35,14 @@ func Load() (*Config, error) {
 		AnnotationMemoryThresholdKey: getEnvOrDefault(
 			"PREOOMKILLER_ANNOTATION_MEMORY_THRESHOLD",
 			controller.PreoomkillerAnnotationMemoryThresholdKey,
+		),
+		AnnotationRestartScheduleKey: getEnvOrDefault(
+			"PREOOMKILLER_ANNOTATION_RESTART_SCHEDULE",
+			controller.PreoomkillerAnnotationRestartScheduleKey,
+		),
+		AnnotationTZKey: getEnvOrDefault(
+			"PREOOMKILLER_ANNOTATION_TZ",
+			controller.PreoomkillerAnnotationTZKey,
 		),
 	}
 
@@ -52,6 +63,15 @@ func Load() (*Config, error) {
 	}
 
 	cfg.Interval = time.Duration(intervalSeconds) * time.Second
+
+	jitterSecondsStr := getEnvOrDefault("PREOOMKILLER_RESTART_SCHEDULE_JITTER_MAX", "30")
+
+	jitterSeconds, err := strconv.Atoi(jitterSecondsStr)
+	if err != nil {
+		return nil, fmt.Errorf("parse restart schedule jitter: %w", err)
+	}
+
+	cfg.RestartScheduleJitterMax = time.Duration(jitterSeconds) * time.Second
 
 	return cfg, nil
 }

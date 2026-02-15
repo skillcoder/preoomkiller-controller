@@ -242,3 +242,78 @@ func (_c *MockRepository_ListPodsQuery_Call) RunAndReturn(run func(ctx context.C
 	_c.Call.Return(run)
 	return _c
 }
+
+// SetAnnotationCommand provides a mock function for the type MockRepository
+func (_mock *MockRepository) SetAnnotationCommand(ctx context.Context, namespace string, name string, key string, value string) error {
+	ret := _mock.Called(ctx, namespace, name, key, value)
+
+	if len(ret) == 0 {
+		panic("no return value specified for SetAnnotationCommand")
+	}
+
+	var r0 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, string, string) error); ok {
+		r0 = returnFunc(ctx, namespace, name, key, value)
+	} else {
+		r0 = ret.Error(0)
+	}
+	return r0
+}
+
+// MockRepository_SetAnnotationCommand_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'SetAnnotationCommand'
+type MockRepository_SetAnnotationCommand_Call struct {
+	*mock.Call
+}
+
+// SetAnnotationCommand is a helper method to define mock.On call
+//   - ctx context.Context
+//   - namespace string
+//   - name string
+//   - key string
+//   - value string
+func (_e *MockRepository_Expecter) SetAnnotationCommand(ctx interface{}, namespace interface{}, name interface{}, key interface{}, value interface{}) *MockRepository_SetAnnotationCommand_Call {
+	return &MockRepository_SetAnnotationCommand_Call{Call: _e.mock.On("SetAnnotationCommand", ctx, namespace, name, key, value)}
+}
+
+func (_c *MockRepository_SetAnnotationCommand_Call) Run(run func(ctx context.Context, namespace string, name string, key string, value string)) *MockRepository_SetAnnotationCommand_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		var arg2 string
+		if args[2] != nil {
+			arg2 = args[2].(string)
+		}
+		var arg3 string
+		if args[3] != nil {
+			arg3 = args[3].(string)
+		}
+		var arg4 string
+		if args[4] != nil {
+			arg4 = args[4].(string)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+			arg3,
+			arg4,
+		)
+	})
+	return _c
+}
+
+func (_c *MockRepository_SetAnnotationCommand_Call) Return(err error) *MockRepository_SetAnnotationCommand_Call {
+	_c.Call.Return(err)
+	return _c
+}
+
+func (_c *MockRepository_SetAnnotationCommand_Call) RunAndReturn(run func(ctx context.Context, namespace string, name string, key string, value string) error) *MockRepository_SetAnnotationCommand_Call {
+	_c.Call.Return(run)
+	return _c
+}
