@@ -17,11 +17,13 @@ type Config struct {
 	LogLevel                     string
 	LogFormat                    string
 	HTTPPort                     string
+	MetricsPort                  string
 	PodLabelSelector             string
 	AnnotationMemoryThresholdKey string
 	AnnotationRestartScheduleKey string
 	AnnotationTZKey              string
 	RestartScheduleJitterMax     time.Duration
+	MinPodAgeBeforeEviction      time.Duration
 }
 
 func Load() (*Config, error) {
@@ -31,6 +33,7 @@ func Load() (*Config, error) {
 		LogLevel:         getEnvOrDefault("LOG_LEVEL", "info"),
 		LogFormat:        getEnvOrDefault("LOG_FORMAT", "json"),
 		HTTPPort:         getEnvOrDefault("HTTP_PORT", "8080"),
+		MetricsPort:      getEnvOrDefault("METRICS_PORT", "9090"),
 		PodLabelSelector: getEnvOrDefault("PREOOMKILLER_POD_LABEL_SELECTOR", controller.PreoomkillerPodLabelSelector),
 		AnnotationMemoryThresholdKey: getEnvOrDefault(
 			"PREOOMKILLER_ANNOTATION_MEMORY_THRESHOLD",
@@ -73,7 +76,32 @@ func Load() (*Config, error) {
 
 	cfg.RestartScheduleJitterMax = time.Duration(jitterSeconds) * time.Second
 
+	minPodAge, err := parseMinPodAgeBeforeEviction()
+	if err != nil {
+		return nil, err
+	}
+
+	cfg.MinPodAgeBeforeEviction = minPodAge
+
 	return cfg, nil
+}
+
+func parseMinPodAgeBeforeEviction() (time.Duration, error) {
+	minPodAgeMinutesStr := getEnvOrDefault("PREOOMKILLER_MIN_POD_AGE_BEFORE_EVICTION", "30")
+
+	minPodAgeMinutes, err := strconv.Atoi(minPodAgeMinutesStr)
+	if err != nil {
+		return 0, fmt.Errorf("parse min pod age before eviction: %w", err)
+	}
+
+	if minPodAgeMinutes < 0 {
+		return 0, fmt.Errorf(
+			"PREOOMKILLER_MIN_POD_AGE_BEFORE_EVICTION must be non-negative, got %d",
+			minPodAgeMinutes,
+		)
+	}
+
+	return time.Duration(minPodAgeMinutes) * time.Minute, nil
 }
 
 func getEnvOrDefault(key, defaultValue string) string {

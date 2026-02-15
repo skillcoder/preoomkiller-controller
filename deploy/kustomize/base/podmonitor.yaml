@@ -1,0 +1,16 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  labels:
+    app.kubernetes.io/name: preoomkiller-controller
+    app.kubernetes.io/component: controller
+  name: preoomkiller-controller
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: preoomkiller-controller
+      app.kubernetes.io/component: controller
+  podMetricsEndpoints:
+  - port: metrics
+    path: /metrics
+    interval: 30s

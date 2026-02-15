@@ -13,6 +13,8 @@ import (
 	"time"
 
 	"k8s.io/apimachinery/pkg/api/resource"
+
+	"github.com/skillcoder/preoomkiller-controller/internal/infra/metrics"
 )
 
 type Service struct {
@@ -26,6 +28,7 @@ type Service struct {
 	annotationTZKey              string
 	annotationRestartAtKey       string
 	jitterMax                    time.Duration
+	minPodAgeBeforeEviction      time.Duration
 	ready                        chan struct{}
 	doneCh                       chan struct{}
 	inShutdown                   atomic.Bool
@@ -48,6 +51,7 @@ func New(
 	annotationTZKey string,
 	annotationRestartAtKey string,
 	jitterMax time.Duration,
+	minPodAgeBeforeEviction time.Duration,
 ) *Service {
 	return &Service{
 		logger:                       logger,
@@ -60,6 +64,7 @@ func New(
 		annotationTZKey:              annotationTZKey,
 		annotationRestartAtKey:       annotationRestartAtKey,
 		jitterMax:                    jitterMax,
+		minPodAgeBeforeEviction:      minPodAgeBeforeEviction,
 		ready:                        make(chan struct{}),
 		doneCh:                       make(chan struct{}),
 		pendingTimers:                make(map[string]*time.Timer, _defaultPendingTimersCapacity),
@@ -231,7 +236,7 @@ func (s *Service) handleExistingRestartAt(
 			"podCreatedAt", pod.CreatedAt.Format(time.RFC3339),
 		)
 
-		ok, evictErr := s.evictPodCommand(ctx, logger, pod.Name, pod.Namespace)
+		ok, evictErr := s.evictPodCommand(ctx, logger, pod.Namespace, pod.Name, &pod)
 		if evictErr != nil {
 			logger.ErrorContext(ctx, "missed eviction failed",
 				"reason", evictErr,
@@ -326,7 +331,7 @@ func (s *Service) runScheduledEviction(
 		"namespace", namespace,
 	)
 
-	ok, err := s.evictPodCommand(evictCtx, logger, name, namespace)
+	ok, err := s.evictPodCommand(evictCtx, logger, namespace, name, nil)
 	if err != nil {
 		logger.ErrorContext(evictCtx, "scheduled eviction failed",
 			"pod", name,
@@ -568,7 +573,7 @@ func (s *Service) processPod(
 	logger.DebugContext(ctx, "pod memory usage", "memoryUsage", podMemoryUsage.String())
 
 	if podMemoryUsage.Cmp(podMemoryThreshold) == 1 {
-		ok, err := s.evictPodCommand(ctx, logger, pod.Name, pod.Namespace)
+		ok, err := s.evictPodCommand(ctx, logger, pod.Namespace, pod.Name, &pod)
 		if err != nil {
 			return false, fmt.Errorf("%w: %w", ErrEvictPod, err)
 		}
@@ -622,10 +627,44 @@ func (s *Service) RunCommand(ctx context.Context) {
 func (s *Service) evictPodCommand(
 	ctx context.Context,
 	logger *slog.Logger,
-	podName,
-	podNamespace string,
+	namespace,
+	name string,
+	pod *Pod,
 ) (bool, error) {
-	err := s.repo.EvictPodCommand(ctx, podNamespace, podName)
+	if pod == nil {
+		fetched, getErr := s.repo.GetPodQuery(ctx, namespace, name)
+		if getErr != nil {
+			var target notFound
+			if errors.As(getErr, &target) {
+				logger.DebugContext(ctx, "pod not found when fetching for eviction")
+
+				return false, nil
+			}
+
+			logger.ErrorContext(ctx, "get pod for eviction failed, skipping eviction",
+				"reason", getErr,
+			)
+
+			return false, fmt.Errorf("get pod for eviction: %w", getErr)
+		}
+
+		pod = &fetched
+	}
+
+	podAge := time.Since(pod.CreatedAt)
+	if s.minPodAgeBeforeEviction > 0 && podAge < s.minPodAgeBeforeEviction {
+		logger.WarnContext(ctx, "eviction skipped, pod too young",
+			"pod", name,
+			"namespace", namespace,
+			"podAge", podAge,
+			"minAge", s.minPodAgeBeforeEviction,
+		)
+		metrics.RecordEvictionSkippedPodTooYoung(namespace, name)
+
+		return false, nil
+	}
+
+	err := s.repo.EvictPodCommand(ctx, namespace, name)
 	if err != nil {
 		var target notFound
 		if errors.As(err, &target) {

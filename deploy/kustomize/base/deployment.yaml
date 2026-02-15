@@ -42,6 +42,9 @@ spec:
         - containerPort: 8080
           name: http
           protocol: TCP
+        - containerPort: 9090
+          name: metrics
+          protocol: TCP
         resources:
           requests:
             cpu: 30m

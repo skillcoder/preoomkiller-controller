@@ -118,6 +118,8 @@ func (s *Server) Ready() <-chan struct{} {
 }
 
 // Shutdown gracefully shuts down the HTTP server
+//
+//nolint:dupl // mirrors MetricsServer.Shutdown for same lifecycle
 func (s *Server) Shutdown(ctx context.Context) error {
 	if !s.inShutdown.CompareAndSwap(false, true) {
 		s.logger.ErrorContext(ctx, "http server is already shutting down, skipping shutdown")

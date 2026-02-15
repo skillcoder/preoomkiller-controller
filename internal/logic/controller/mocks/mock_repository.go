@@ -175,6 +175,78 @@ func (_c *MockRepository_GetPodMetricsQuery_Call) RunAndReturn(run func(ctx cont
 	return _c
 }
 
+// GetPodQuery provides a mock function for the type MockRepository
+func (_mock *MockRepository) GetPodQuery(ctx context.Context, namespace string, name string) (controller.Pod, error) {
+	ret := _mock.Called(ctx, namespace, name)
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetPodQuery")
+	}
+
+	var r0 controller.Pod
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string) (controller.Pod, error)); ok {
+		return returnFunc(ctx, namespace, name)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string) controller.Pod); ok {
+		r0 = returnFunc(ctx, namespace, name)
+	} else {
+		r0 = ret.Get(0).(controller.Pod)
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string, string) error); ok {
+		r1 = returnFunc(ctx, namespace, name)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockRepository_GetPodQuery_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetPodQuery'
+type MockRepository_GetPodQuery_Call struct {
+	*mock.Call
+}
+
+// GetPodQuery is a helper method to define mock.On call
+//   - ctx context.Context
+//   - namespace string
+//   - name string
+func (_e *MockRepository_Expecter) GetPodQuery(ctx interface{}, namespace interface{}, name interface{}) *MockRepository_GetPodQuery_Call {
+	return &MockRepository_GetPodQuery_Call{Call: _e.mock.On("GetPodQuery", ctx, namespace, name)}
+}
+
+func (_c *MockRepository_GetPodQuery_Call) Run(run func(ctx context.Context, namespace string, name string)) *MockRepository_GetPodQuery_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		var arg2 string
+		if args[2] != nil {
+			arg2 = args[2].(string)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+		)
+	})
+	return _c
+}
+
+func (_c *MockRepository_GetPodQuery_Call) Return(pod controller.Pod, err error) *MockRepository_GetPodQuery_Call {
+	_c.Call.Return(pod, err)
+	return _c
+}
+
+func (_c *MockRepository_GetPodQuery_Call) RunAndReturn(run func(ctx context.Context, namespace string, name string) (controller.Pod, error)) *MockRepository_GetPodQuery_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // ListPodsQuery provides a mock function for the type MockRepository
 func (_mock *MockRepository) ListPodsQuery(ctx context.Context, labelSelector string) ([]controller.Pod, error) {
 	ret := _mock.Called(ctx, labelSelector)

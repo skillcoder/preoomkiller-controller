@@ -64,6 +64,27 @@ func (a *adapter) ListPodsQuery(
 	return pods, nil
 }
 
+func (a *adapter) GetPodQuery(
+	ctx context.Context,
+	namespace,
+	name string,
+) (controller.Pod, error) {
+	pod, err := a.clientset.CoreV1().Pods(namespace).Get(
+		ctx,
+		name,
+		metav1.GetOptions{},
+	)
+	if err != nil {
+		if apierrors.IsNotFound(err) {
+			return controller.Pod{}, fmt.Errorf("get pod: %w", errPodNotFound)
+		}
+
+		return controller.Pod{}, fmt.Errorf("get pod: %w", err)
+	}
+
+	return toDomainPod(pod), nil
+}
+
 func (a *adapter) GetPodMetricsQuery(
 	ctx context.Context,
 	namespace,

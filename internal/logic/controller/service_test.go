@@ -55,6 +55,7 @@ func TestService_ReconcileCommand(t *testing.T) {
 			controller.PreoomkillerAnnotationTZKey,
 			controller.PreoomkillerAnnotationRestartAtKey,
 			30*time.Second,
+			0,
 		)
 
 		repo.EXPECT().
@@ -81,6 +82,7 @@ func TestService_ReconcileCommand(t *testing.T) {
 			controller.PreoomkillerAnnotationTZKey,
 			controller.PreoomkillerAnnotationRestartAtKey,
 			30*time.Second,
+			0,
 		)
 
 		repo.EXPECT().
@@ -107,6 +109,7 @@ func TestService_ReconcileCommand(t *testing.T) {
 			controller.PreoomkillerAnnotationTZKey,
 			controller.PreoomkillerAnnotationRestartAtKey,
 			30*time.Second,
+			0,
 		)
 
 		pod := controller.Pod{
@@ -150,6 +153,7 @@ func TestService_ReconcileCommand(t *testing.T) {
 			controller.PreoomkillerAnnotationTZKey,
 			controller.PreoomkillerAnnotationRestartAtKey,
 			30*time.Second,
+			0,
 		)
 
 		pod := controller.Pod{
@@ -178,6 +182,96 @@ func TestService_ReconcileCommand(t *testing.T) {
 		require.NoError(t, err)
 	})
 
+	t.Run("pod over threshold but too young skips eviction", func(t *testing.T) {
+		t.Parallel()
+
+		repo := mocks.NewMockRepository(t)
+		minPodAge := 30 * time.Minute
+		svc := controller.New(
+			logger,
+			repo,
+			cronparser.New(),
+			1*time.Second,
+			"label",
+			controller.PreoomkillerAnnotationMemoryThresholdKey,
+			controller.PreoomkillerAnnotationRestartScheduleKey,
+			controller.PreoomkillerAnnotationTZKey,
+			controller.PreoomkillerAnnotationRestartAtKey,
+			30*time.Second,
+			minPodAge,
+		)
+
+		pod := controller.Pod{
+			Name:      "test-pod",
+			Namespace: "default",
+			Annotations: map[string]string{
+				controller.PreoomkillerAnnotationMemoryThresholdKey: "256Mi",
+			},
+			MemoryLimit: ptrQty(testQty("1Gi")),
+			CreatedAt:   time.Now().Add(-10 * time.Minute),
+		}
+
+		repo.EXPECT().
+			ListPodsQuery(mock.Anything, "label").
+			Return([]controller.Pod{pod}, nil).
+			Once()
+		repo.EXPECT().
+			GetPodMetricsQuery(mock.Anything, "default", "test-pod").
+			Return(&controller.PodMetrics{MemoryUsage: ptrQty(testQty("512Mi"))}, nil).
+			Once()
+		// EvictPodCommand must not be called (eviction skipped due to pod too young)
+		repo.EXPECT().
+			EvictPodCommand(mock.Anything, mock.Anything, mock.Anything).
+			Maybe()
+
+		err := svc.ReconcileCommand(t.Context())
+		require.NoError(t, err)
+	})
+
+	t.Run("missed scheduled eviction but pod too young skips eviction", func(t *testing.T) {
+		t.Parallel()
+
+		repo := mocks.NewMockRepository(t)
+		minPodAge := 30 * time.Minute
+		svc := controller.New(
+			logger,
+			repo,
+			cronparser.New(),
+			1*time.Second,
+			"label",
+			controller.PreoomkillerAnnotationMemoryThresholdKey,
+			controller.PreoomkillerAnnotationRestartScheduleKey,
+			controller.PreoomkillerAnnotationTZKey,
+			controller.PreoomkillerAnnotationRestartAtKey,
+			30*time.Second,
+			minPodAge,
+		)
+
+		now := time.Now()
+		restartAt := now.Add(-5 * time.Minute)
+		pod := controller.Pod{
+			Name:      "scheduled-pod",
+			Namespace: "default",
+			Annotations: map[string]string{
+				controller.PreoomkillerAnnotationRestartScheduleKey: "0 * * * *",
+				controller.PreoomkillerAnnotationRestartAtKey:       restartAt.Format(time.RFC3339),
+			},
+			CreatedAt: now.Add(-10 * time.Minute),
+		}
+
+		repo.EXPECT().
+			ListPodsQuery(mock.Anything, "label").
+			Return([]controller.Pod{pod}, nil).
+			Once()
+		// EvictPodCommand must not be called (pod too young)
+		repo.EXPECT().
+			EvictPodCommand(mock.Anything, mock.Anything, mock.Anything).
+			Maybe()
+
+		err := svc.ReconcileCommand(t.Context())
+		require.NoError(t, err)
+	})
+
 	t.Run("metrics not found skips pod", func(t *testing.T) {
 		t.Parallel()
 
@@ -193,6 +287,7 @@ func TestService_ReconcileCommand(t *testing.T) {
 			controller.PreoomkillerAnnotationTZKey,
 			controller.PreoomkillerAnnotationRestartAtKey,
 			30*time.Second,
+			0,
 		)
 
 		pod := controller.Pod{
@@ -234,6 +329,7 @@ func TestService_Start_Ready_Shutdown(t *testing.T) {
 		controller.PreoomkillerAnnotationTZKey,
 		controller.PreoomkillerAnnotationRestartAtKey,
 		30*time.Second,
+		0,
 	)
 
 	repo.EXPECT().
@@ -280,6 +376,7 @@ func TestService_Ping(t *testing.T) {
 			controller.PreoomkillerAnnotationTZKey,
 			controller.PreoomkillerAnnotationRestartAtKey,
 			30*time.Second,
+			0,
 		)
 
 		err := svc.Ping(t.Context())
@@ -301,6 +398,7 @@ func TestService_Ping(t *testing.T) {
 			controller.PreoomkillerAnnotationTZKey,
 			controller.PreoomkillerAnnotationRestartAtKey,
 			30*time.Second,
+			0,
 		)
 
 		repo.EXPECT().

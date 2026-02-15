@@ -63,6 +63,14 @@ func assertConfigFields(t *testing.T, got, want *config.Config) {
 	if want.RestartScheduleJitterMax != 0 {
 		require.Equal(t, want.RestartScheduleJitterMax, got.RestartScheduleJitterMax)
 	}
+
+	if want.MetricsPort != "" {
+		require.Equal(t, want.MetricsPort, got.MetricsPort)
+	}
+
+	if want.MinPodAgeBeforeEviction != 0 {
+		require.Equal(t, want.MinPodAgeBeforeEviction, got.MinPodAgeBeforeEviction)
+	}
 }
 
 func TestLoad(t *testing.T) {
@@ -78,11 +86,13 @@ func TestLoad(t *testing.T) {
 				LogLevel:                     "info",
 				LogFormat:                    "json",
 				HTTPPort:                     "8080",
+				MetricsPort:                  "9090",
 				PodLabelSelector:             controller.PreoomkillerPodLabelSelector,
 				AnnotationMemoryThresholdKey: controller.PreoomkillerAnnotationMemoryThresholdKey,
 				AnnotationRestartScheduleKey: controller.PreoomkillerAnnotationRestartScheduleKey,
 				AnnotationTZKey:              controller.PreoomkillerAnnotationTZKey,
 				RestartScheduleJitterMax:     30 * time.Second,
+				MinPodAgeBeforeEviction:      30 * time.Minute,
 				Interval:                     300 * time.Second,
 				PingerInterval:               10 * time.Second,
 			},
@@ -131,6 +141,38 @@ func TestLoad(t *testing.T) {
 				"INTERVAL":        "300",
 				"PINGER_INTERVAL": "10",
 				"PREOOMKILLER_RESTART_SCHEDULE_JITTER_MAX": "x",
+			},
+			wantErr: true,
+		},
+		{
+			name: "override METRICS_PORT and PREOOMKILLER_MIN_POD_AGE_BEFORE_EVICTION",
+			giveEnv: map[string]string{
+				"INTERVAL":        "300",
+				"PINGER_INTERVAL": "10",
+				"METRICS_PORT":    "9091",
+				"PREOOMKILLER_MIN_POD_AGE_BEFORE_EVICTION": "15",
+			},
+			wantErr: false,
+			wantCfg: &config.Config{
+				MetricsPort:             "9091",
+				MinPodAgeBeforeEviction: 15 * time.Minute,
+			},
+		},
+		{
+			name: "invalid PREOOMKILLER_MIN_POD_AGE_BEFORE_EVICTION",
+			giveEnv: map[string]string{
+				"INTERVAL":        "300",
+				"PINGER_INTERVAL": "10",
+				"PREOOMKILLER_MIN_POD_AGE_BEFORE_EVICTION": "x",
+			},
+			wantErr: true,
+		},
+		{
+			name: "negative PREOOMKILLER_MIN_POD_AGE_BEFORE_EVICTION",
+			giveEnv: map[string]string{
+				"INTERVAL":        "300",
+				"PINGER_INTERVAL": "10",
+				"PREOOMKILLER_MIN_POD_AGE_BEFORE_EVICTION": "-1",
 			},
 			wantErr: true,
 		},

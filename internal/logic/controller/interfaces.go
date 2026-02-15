@@ -13,6 +13,12 @@ type Repository interface {
 		labelSelector string,
 	) ([]Pod, error)
 
+	GetPodQuery(
+		ctx context.Context,
+		namespace,
+		name string,
+	) (Pod, error)
+
 	GetPodMetricsQuery(
 		ctx context.Context,
 		namespace,

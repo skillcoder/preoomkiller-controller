@@ -25,6 +25,7 @@ type App struct {
 	appState      appstater
 	controller    appServer
 	httpServer    appServer
+	metricsServer appServer
 }
 
 // New creates a new application instance with all dependencies wired.
@@ -71,10 +72,14 @@ func New(
 		cfg.AnnotationTZKey,
 		controller.PreoomkillerAnnotationRestartAtKey,
 		cfg.RestartScheduleJitterMax,
+		cfg.MinPodAgeBeforeEviction,
 	)
 
 	// Create HTTP server
 	httpServer := httpserver.New(logger, appState, cfg.HTTPPort)
+
+	// Create metrics server (separate port for Prometheus scraping)
+	metricsServer := httpserver.NewMetricsServer(logger, cfg.MetricsPort)
 
 	// Create signal handler
 	signalHandler := shutdown.New(logger, appState)
@@ -84,6 +89,7 @@ func New(
 		signalHandler: signalHandler,
 		appState:      appState,
 		httpServer:    httpServer,
+		metricsServer: metricsServer,
 		logger:        logger,
 	}, nil
 }
@@ -126,11 +132,15 @@ func (a *App) startServices(ctx context.Context, cancel func()) error {
 	go a.signalHandler.HandleSignals(ctx, cancel)
 
 	if err := a.startHTTPServer(ctx); err != nil {
-		return err
+		return fmt.Errorf("start http server: %w", err)
+	}
+
+	if err := a.startMetricsServer(ctx); err != nil {
+		return fmt.Errorf("start metrics server: %w", err)
 	}
 
 	if err := a.startController(ctx); err != nil {
-		return err
+		return fmt.Errorf("start controller: %w", err)
 	}
 
 	return nil
@@ -148,6 +158,23 @@ func (a *App) startHTTPServer(ctx context.Context) error {
 
 	if err := a.appState.RegisterPinger(a.httpServer); err != nil {
 		return fmt.Errorf("register pinger: %w", err)
+	}
+
+	return nil
+}
+
+// startMetricsServer starts the metrics server and registers it
+func (a *App) startMetricsServer(ctx context.Context) error {
+	if err := a.metricsServer.Start(ctx); err != nil {
+		return fmt.Errorf("start metrics server: %w", err)
+	}
+
+	if err := a.appState.RegisterShutdowner(a.metricsServer); err != nil {
+		return fmt.Errorf("register metrics shutdowner: %w", err)
+	}
+
+	if err := a.appState.RegisterPinger(a.metricsServer); err != nil {
+		return fmt.Errorf("register metrics pinger: %w", err)
 	}
 
 	return nil
@@ -175,7 +202,7 @@ func (a *App) waitForReady(ctx context.Context) error {
 	select {
 	case <-ctx.Done():
 		return fmt.Errorf("context done")
-	case <-allChannelsClose(ctx, a.logger, a.httpServer.Ready(), a.controller.Ready()):
+	case <-allChannelsClose(ctx, a.logger, a.httpServer.Ready(), a.metricsServer.Ready(), a.controller.Ready()):
 		// All are ready
 	}
 
