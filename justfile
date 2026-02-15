@@ -87,4 +87,4 @@ install-tools:
     brew install mockery
     brew install golangci-lint
 
-fc: generate build test fmt lint
+fc: generate tidy build test fmt lint

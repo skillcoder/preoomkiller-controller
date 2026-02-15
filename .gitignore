@@ -81,4 +81,5 @@ tags
 /AGENTS.md
 .env
 .envrc
+/.taskmaster
 /.go-cache
