@@ -1,0 +1,36 @@
+all: false
+dir: '{{.InterfaceDir}}'
+filename: mocks_test.go
+force-file-write: true
+formatter: goimports
+generate: true
+include-auto-generated: false
+log-level: info
+structname: '{{.Mock}}{{.InterfaceName}}'
+pkgname: '{{.SrcPackageName}}'
+recursive: false
+require-template-schema-exists: true
+template: testify
+template-schema: '{{.Template}}.schema.json'
+packages:
+  github.com/skillcoder/preoomkiller-controller/internal/logic/controller:
+    config:
+      all: false
+      include-interface-regex: "^Repository$"
+      dir: internal/logic/controller/mocks
+      filename: mock_repository.go
+      pkgname: mocks
+  github.com/skillcoder/preoomkiller-controller/internal/infra/shutdown:
+    config:
+      all: false
+      include-interface-regex: "^Shutdowner$"
+      dir: internal/infra/shutdown/mocks
+      filename: mock_shutdowner.go
+      pkgname: mocks
+  github.com/skillcoder/preoomkiller-controller/internal/infra/appstate:
+    config:
+      all: false
+      include-interface-regex: "^(healthChecker|readyChecker|statusGetter)$"
+      dir: internal/infra/appstate
+      filename: mocks_handlers_test.go
+      pkgname: appstate
