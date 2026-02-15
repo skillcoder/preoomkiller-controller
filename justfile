@@ -56,7 +56,7 @@ fmt:
     go fmt ./...
 
 # Run code generation
-generate: mocks-generate
+generate: # mocks-generate
     go generate ./...
 
 # Generate mocks using mockery

@@ -61,6 +61,8 @@ func New(
 		logger,
 		k8sRepo,
 		cfg.Interval,
+		cfg.PodLabelSelector,
+		cfg.AnnotationMemoryThresholdKey,
 	)
 
 	// Create HTTP server

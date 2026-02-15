@@ -130,7 +130,7 @@ func Test_resolveMemoryThreshold(t *testing.T) {
 
 			pod := newTestPod(tt.annotations, tt.memoryLimit)
 
-			got, err := resolveMemoryThreshold(t.Context(), logger, pod)
+			got, err := resolveMemoryThreshold(t.Context(), logger, pod, PreoomkillerAnnotationMemoryThresholdKey)
 			if tt.wantErr != nil {
 				require.ErrorIs(t, err, tt.wantErr)
 

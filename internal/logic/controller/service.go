@@ -15,14 +15,16 @@ import (
 )
 
 type Service struct {
-	logger               *slog.Logger
-	repo                 Repository
-	interval             time.Duration
-	ready                chan struct{}
-	doneCh               chan struct{}
-	inShutdown           atomic.Bool
-	mu                   sync.RWMutex
-	lastReconcileEndTime time.Time
+	logger                       *slog.Logger
+	repo                         Repository
+	interval                     time.Duration
+	labelSelector                string
+	annotationMemoryThresholdKey string
+	ready                        chan struct{}
+	doneCh                       chan struct{}
+	inShutdown                   atomic.Bool
+	mu                           sync.RWMutex
+	lastReconcileEndTime         time.Time
 }
 
 // New creates a new controller service.
@@ -30,13 +32,17 @@ func New(
 	logger *slog.Logger,
 	repo Repository,
 	interval time.Duration,
+	labelSelector string,
+	annotationMemoryThresholdKey string,
 ) *Service {
 	return &Service{
-		logger:   logger,
-		repo:     repo,
-		interval: interval,
-		ready:    make(chan struct{}),
-		doneCh:   make(chan struct{}),
+		logger:                       logger,
+		repo:                         repo,
+		interval:                     interval,
+		labelSelector:                labelSelector,
+		annotationMemoryThresholdKey: annotationMemoryThresholdKey,
+		ready:                        make(chan struct{}),
+		doneCh:                       make(chan struct{}),
 	}
 }
 
@@ -102,10 +108,7 @@ func (s *Service) Shutdown(ctx context.Context) error {
 func (s *Service) ReconcileCommand(ctx context.Context) error {
 	logger := s.logger.With("controller", "ReconcileCommand")
 
-	pods, err := s.repo.ListPodsQuery(
-		ctx,
-		PreoomkillerPodLabelSelector,
-	)
+	pods, err := s.repo.ListPodsQuery(ctx, s.labelSelector)
 	if err != nil {
 		return fmt.Errorf("list pods: %w", err)
 	}
@@ -160,9 +163,8 @@ func resolveMemoryThreshold(
 	ctx context.Context,
 	logger *slog.Logger,
 	pod Pod,
+	annotationKey string,
 ) (resource.Quantity, error) {
-	annotationKey := PreoomkillerAnnotationMemoryThresholdKey
-
 	memoryThresholdStr, ok := pod.Annotations[annotationKey]
 	if !ok {
 		return resource.Quantity{}, fmt.Errorf(
@@ -269,7 +271,7 @@ func (s *Service) processPod(
 ) (bool, error) {
 	logger = logger.With("pod", pod.Name, "namespace", pod.Namespace, "controller", "processPod")
 
-	podMemoryThreshold, err := resolveMemoryThreshold(ctx, logger, pod)
+	podMemoryThreshold, err := resolveMemoryThreshold(ctx, logger, pod, s.annotationMemoryThresholdKey)
 	if err != nil {
 		if errors.Is(err, ErrMemoryLimitNotDefined) {
 			return false, nil

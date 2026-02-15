@@ -6,9 +6,69 @@ A Kubernetes controller that gracefully evicts selected pods before they get **O
 
 Intentionally **NOT compatible** with upstream:
 - Uses environment variables for configuration instead of flags
-- Different label: `preoomkiller.beta.k8s.skillcoder.com/enabled=true`
-- Different annotation: `preoomkiller.beta.k8s.skillcoder.com/memory-threshold`
+- Different default label: `preoomkiller.beta.k8s.skillcoder.com/enabled=true`
+- Different default annotation: `preoomkiller.beta.k8s.skillcoder.com/memory-threshold`
 - Different default interval: `300s` instead of `60s`
+
+You can match upstream behavior by setting:
+
+- **`PREOOMKILLER_POD_LABEL_SELECTOR`** — label selector to list pods (default: `preoomkiller.beta.k8s.skillcoder.com/enabled=true`)
+- **`PREOOMKILLER_ANNOTATION_MEMORY_THRESHOLD`** — annotation key for memory threshold (default: `preoomkiller.beta.k8s.skillcoder.com/memory-threshold`)
+
+### Using upstream label and annotation
+
+To use the same Pod label and annotation as upstream, set the controller env in your Deployment (or similar) manifest:
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: preoomkiller-controller
+  namespace: kube-system
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: preoomkiller-controller
+  template:
+    metadata:
+      labels:
+        app: preoomkiller-controller
+    spec:
+      serviceAccountName: preoomkiller-controller
+      containers:
+      - name: controller
+        image: gha.io/skillcoder/preoomkiller-controller:latest
+        env:
+        - name: INTERVAL
+          value: "60"
+        - name: PREOOMKILLER_POD_LABEL_SELECTOR
+          value: "preoomkiller-enabled=true"
+        - name: PREOOMKILLER_ANNOTATION_MEMORY_THRESHOLD
+          value: "preoomkiller.alpha.k8s.zapier.com/memory-threshold"
+```
+
+Then add the upstream label and annotation to your pod template:
+
+- **Label:** `preoomkiller-enabled: "true"`
+- **Annotation:** `preoomkiller.alpha.k8s.zapier.com/memory-threshold: "2Gi"` (or your desired threshold)
+
+Example Pod:
+
+```yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: upstream-demo
+  labels:
+    preoomkiller-enabled: "true"
+  annotations:
+    preoomkiller.alpha.k8s.zapier.com/memory-threshold: "2Gi"
+spec:
+  containers:
+  - name: app
+    image: your-image:latest
+```
 
 ## How it works
 
@@ -21,6 +81,25 @@ Pods can specify a memory threshold (e.g., `512Mi`, `1Gi`) via the annotation `p
 This operation is safe because it uses Kubernetes' pod **eviction** API, which respects **PodDisruptionBudget** constraints and ensures that a specified minimum number of ready pods remain available.
 
 ## Usage
+
+### Environment variables
+
+| Variable | Default | Description |
+| -------- | ------- | ----------- |
+| `KUBECONFIG` | (empty) | Path to kubeconfig file. |
+| `KUBERNETES_MASTER` | (empty) | Kubernetes API server URL. |
+| `LOG_LEVEL` | `info` | Log level (e.g. `debug`, `info`, `warn`, `error`). |
+| `LOG_FORMAT` | `json` | Log format (`json` or `text`). |
+| `HTTP_PORT` | `8080` | Port for health/readiness HTTP server. |
+| `INTERVAL` | `300` | Reconciliation interval in seconds. |
+| `PINGER_INTERVAL` | `10` | Pinger check interval in seconds. |
+| `PREOOMKILLER_POD_LABEL_SELECTOR` | `preoomkiller.beta.k8s.skillcoder.com/enabled=true` | Label selector to list pods. |
+| `PREOOMKILLER_ANNOTATION_MEMORY_THRESHOLD` | `preoomkiller.beta.k8s.skillcoder.com/memory-threshold` | Annotation key read from pod metadata for the memory threshold. See below for value format. |
+
+**Memory threshold annotation value** (the value pods set on the annotation key above):
+
+- **Absolute:** Kubernetes quantity string, e.g. `512Mi`, `1Gi`. Eviction when pod memory usage exceeds this amount.
+- **Percentage:** Number followed by `%`, e.g. `80%`, `50%`. Value must be in (0, 100]. Interpreted as a percentage of the pod’s total memory limit (sum of all container limits). If the pod has no memory limit, percentage thresholds are ignored and the pod is not evicted.
 
 ### Deployment
 
