@@ -250,7 +250,10 @@ func (s *Service) handleExistingRestartAt(
 		}
 
 		if ok {
-			logger.InfoContext(ctx, "pod evicted (missed schedule)")
+			logger.InfoContext(ctx, "pod evicted due to missed on time eviction",
+				"restartAt", restartAtStr,
+				"podCreatedAt", pod.CreatedAt.Format(time.RFC3339),
+			)
 		}
 
 		return true
@@ -662,8 +665,8 @@ func (s *Service) evictPodCommand(
 		logger.WarnContext(ctx, "eviction skipped, pod too young",
 			"pod", name,
 			"namespace", namespace,
-			"podAge", podAge,
-			"minAge", s.minPodAgeBeforeEviction,
+			"podAge", podAge.Round(time.Second).String(),
+			"minAge", s.minPodAgeBeforeEviction.Round(time.Second).String(),
 		)
 		metrics.RecordEvictionSkippedPodTooYoung(namespace, name)
 
