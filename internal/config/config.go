@@ -28,28 +28,28 @@ type Config struct {
 
 func Load() (*Config, error) {
 	cfg := &Config{
-		KubeConfig:       os.Getenv("KUBECONFIG"),
-		KubeMaster:       os.Getenv("KUBERNETES_MASTER"),
-		LogLevel:         getEnvOrDefault("LOG_LEVEL", "info"),
-		LogFormat:        getEnvOrDefault("LOG_FORMAT", "json"),
-		HTTPPort:         getEnvOrDefault("HTTP_PORT", "8080"),
-		MetricsPort:      getEnvOrDefault("METRICS_PORT", "9090"),
-		PodLabelSelector: getEnvOrDefault("PREOOMKILLER_POD_LABEL_SELECTOR", controller.PreoomkillerPodLabelSelector),
+		KubeConfig:       getEnvWithFallback(envKeyKubeConfig, envKeyKubeConfigFallback),
+		KubeMaster:       getEnvWithFallback(envKeyKubeMaster, envKeyKubeMasterFallback),
+		LogLevel:         getEnvOrDefault(envKeyLogLevel, "info"),
+		LogFormat:        getEnvOrDefault(envKeyLogFormat, "json"),
+		HTTPPort:         getEnvOrDefault(envKeyHTTPPort, "8080"),
+		MetricsPort:      getEnvOrDefault(envKeyMetricsPort, "9090"),
+		PodLabelSelector: getEnvOrDefault(envKeyPodLabelSelector, controller.PreoomkillerPodLabelSelector),
 		AnnotationMemoryThresholdKey: getEnvOrDefault(
-			"PREOOMKILLER_ANNOTATION_MEMORY_THRESHOLD",
+			envKeyAnnotationMemoryThreshold,
 			controller.PreoomkillerAnnotationMemoryThresholdKey,
 		),
 		AnnotationRestartScheduleKey: getEnvOrDefault(
-			"PREOOMKILLER_ANNOTATION_RESTART_SCHEDULE",
+			envKeyAnnotationRestartSchedule,
 			controller.PreoomkillerAnnotationRestartScheduleKey,
 		),
 		AnnotationTZKey: getEnvOrDefault(
-			"PREOOMKILLER_ANNOTATION_TZ",
+			envKeyAnnotationTZ,
 			controller.PreoomkillerAnnotationTZKey,
 		),
 	}
 
-	pingerIntervalSecondsStr := getEnvOrDefault("PINGER_INTERVAL", "10")
+	pingerIntervalSecondsStr := getEnvOrDefault(envKeyPingerIntervalSec, "10")
 
 	pingerIntervalSeconds, err := strconv.Atoi(pingerIntervalSecondsStr)
 	if err != nil {
@@ -58,7 +58,7 @@ func Load() (*Config, error) {
 
 	cfg.PingerInterval = time.Duration(pingerIntervalSeconds) * time.Second
 
-	intervalSecondsStr := getEnvOrDefault("INTERVAL", "300")
+	intervalSecondsStr := getEnvOrDefault(envKeyIntervalSec, "300")
 
 	intervalSeconds, err := strconv.Atoi(intervalSecondsStr)
 	if err != nil {
@@ -67,7 +67,7 @@ func Load() (*Config, error) {
 
 	cfg.Interval = time.Duration(intervalSeconds) * time.Second
 
-	jitterSecondsStr := getEnvOrDefault("PREOOMKILLER_RESTART_SCHEDULE_JITTER_MAX", "30")
+	jitterSecondsStr := getEnvOrDefault(envKeyRestartScheduleJitterMaxSec, "30")
 
 	jitterSeconds, err := strconv.Atoi(jitterSecondsStr)
 	if err != nil {
@@ -76,7 +76,7 @@ func Load() (*Config, error) {
 
 	cfg.RestartScheduleJitterMax = time.Duration(jitterSeconds) * time.Second
 
-	minPodAge, err := parseMinPodAgeBeforeEviction()
+	minPodAge, err := parseMinPodAgeBeforeEvictionSec()
 	if err != nil {
 		return nil, err
 	}
@@ -86,22 +86,23 @@ func Load() (*Config, error) {
 	return cfg, nil
 }
 
-func parseMinPodAgeBeforeEviction() (time.Duration, error) {
-	minPodAgeMinutesStr := getEnvOrDefault("PREOOMKILLER_MIN_POD_AGE_BEFORE_EVICTION", "30")
+func parseMinPodAgeBeforeEvictionSec() (time.Duration, error) {
+	minPodAgeSecondsStr := getEnvOrDefault(envKeyMinPodAgeBeforeEvictionSec, "1800")
 
-	minPodAgeMinutes, err := strconv.Atoi(minPodAgeMinutesStr)
+	minPodAgeSeconds, err := strconv.Atoi(minPodAgeSecondsStr)
 	if err != nil {
 		return 0, fmt.Errorf("parse min pod age before eviction: %w", err)
 	}
 
-	if minPodAgeMinutes < 0 {
+	if minPodAgeSeconds < 0 {
 		return 0, fmt.Errorf(
-			"PREOOMKILLER_MIN_POD_AGE_BEFORE_EVICTION must be non-negative, got %d",
-			minPodAgeMinutes,
+			"%s must be non-negative, got %d",
+			envKeyMinPodAgeBeforeEvictionSec,
+			minPodAgeSeconds,
 		)
 	}
 
-	return time.Duration(minPodAgeMinutes) * time.Minute, nil
+	return time.Duration(minPodAgeSeconds) * time.Second, nil
 }
 
 func getEnvOrDefault(key, defaultValue string) string {
@@ -111,4 +112,12 @@ func getEnvOrDefault(key, defaultValue string) string {
 	}
 
 	return value
+}
+
+func getEnvWithFallback(primaryKey, fallbackKey string) string {
+	if v := os.Getenv(primaryKey); v != "" {
+		return v
+	}
+
+	return os.Getenv(fallbackKey)
 }

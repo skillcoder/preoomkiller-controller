@@ -164,7 +164,7 @@ PreoomkillerAnnotationRestartAtKey       = "preoomkiller.beta.k8s.skillcoder.com
 ```go
 AnnotationRestartScheduleKey string         // env PREOOMKILLER_ANNOTATION_RESTART_SCHEDULE
 AnnotationTZKey              string         // env PREOOMKILLER_ANNOTATION_TZ
-RestartScheduleJitterMax     time.Duration  // env PREOOMKILLER_RESTART_SCHEDULE_JITTER_MAX, default 30s
+RestartScheduleJitterMax     time.Duration  // env PREOOMKILLER_RESTART_SCHEDULE_JITTER_MAX_SEC, default 30s
 ```
 
 Defaults for the two annotation keys from the controller constants.
@@ -801,7 +801,7 @@ Add section documenting:
 - Eviction fires via goroutine at the scheduled time plus random jitter.
 - Missed evictions are detected and retried on controller restart.
 - New env vars: `PREOOMKILLER_ANNOTATION_RESTART_SCHEDULE`, `PREOOMKILLER_ANNOTATION_TZ`,
-  `PREOOMKILLER_RESTART_SCHEDULE_JITTER_MAX`. The `restart-at` annotation key
+  `PREOOMKILLER_RESTART_SCHEDULE_JITTER_MAX_SEC`. The `restart-at` annotation key
   is not configurable (hardcoded constant).
 
 ## Files touched (summary)

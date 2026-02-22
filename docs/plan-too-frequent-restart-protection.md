@@ -4,7 +4,7 @@
 
 - **Detect**: Pod would be evicted (memory-threshold or scheduled) but pod age < configured minimum (default 30 min).
 - **Action**: Log warn, **skip eviction** (protection), and increment a Prometheus counter so alerts can fire.
-- **Config**: Min pod age configurable via ENV (e.g. `PREOOMKILLER_MIN_POD_AGE_BEFORE_EVICTION`, default 30m).
+- **Config**: Min pod age configurable via ENV (e.g. `PREOOMKILLER_MIN_POD_AGE_BEFORE_EVICTION_SEC`, default 1800s = 30m).
 
 ## Architecture
 
@@ -35,8 +35,8 @@ flowchart LR
 **File:** [internal/config/config.go](internal/config/config.go)
 
 - Add `MinPodAgeBeforeEviction time.Duration` to `Config`.
-- Read from ENV, e.g. `PREOOMKILLER_MIN_POD_AGE_BEFORE_EVICTION`; default `30 * time.Minute`. Parse as minutes (integer) for simplicity, e.g. `"30"` → 30m; support only non-negative values (0 = disabled).
-- Add `MetricsPort string` (default `9090`), from ENV `METRICS_PORT`.
+- Read from ENV, e.g. `PREOOMKILLER_MIN_POD_AGE_BEFORE_EVICTION_SEC`; default `1800` (seconds = 30m). Parse as integer seconds; support only non-negative values (0 = disabled).
+- Add `MetricsPort string` (default `9090`), from ENV `PREOOMKILLER_METRICS_PORT`.
 
 ## 2. Logic layer (controller)
 
@@ -63,7 +63,7 @@ flowchart LR
 - **New package** `internal/infra/metrics`:
   - **Global metric registry**: Use the **default registry**. Create the counter with `promauto.With(prometheus.DefaultRegisterer).NewCounterVec(prometheus.CounterOpts{ Name: "preoomkiller_eviction_skipped_pod_too_young_total", Help: "Total number of evictions skipped because pod age was below minimum (possible misconfiguration or too-frequent restarts)." }, []string{"namespace", "pod"})`. Store in a package-level variable (unexported).
   - Expose a single function: `func RecordEvictionSkippedPodTooYoung(namespace, pod string)` that does `counter.WithLabelValues(namespace, pod).Inc()`. Controller calls this in-place where it skips eviction (no separate reporter type).
-- **Metrics server (separate port):** Expose metrics on a **dedicated port** (default `9090`) so Prometheus can scrape without hitting the main health/status server. New component `MetricsServer` in [internal/httpserver/metrics_server.go](internal/httpserver/metrics_server.go): listens on `METRICS_PORT`, serves only `GET /metrics` via `promhttp.Handler()`. Register with appstate (shutdown + pinger). Config: `MetricsPort string` (e.g. from `METRICS_PORT`, default `9090`).
+- **Metrics server (separate port):** Expose metrics on a **dedicated port** (default `9090`) so Prometheus can scrape without hitting the main health/status server. New component `MetricsServer` in [internal/httpserver/metrics_server.go](internal/httpserver/metrics_server.go): listens on `PREOOMKILLER_METRICS_PORT`, serves only `GET /metrics` via `promhttp.Handler()`. Register with appstate (shutdown + pinger). Config: `MetricsPort string` (e.g. from `PREOOMKILLER_METRICS_PORT`, default `9090`).
 
 ## 5. Wiring (app)
 

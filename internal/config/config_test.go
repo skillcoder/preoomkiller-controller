@@ -78,8 +78,8 @@ func TestLoad(t *testing.T) {
 		{
 			name: "all defaults",
 			giveEnv: map[string]string{
-				"INTERVAL":        "300",
-				"PINGER_INTERVAL": "10",
+				"PREOOMKILLER_INTERVAL_SEC":        "300",
+				"PREOOMKILLER_PINGER_INTERVAL_SEC": "10",
 			},
 			wantErr: false,
 			wantCfg: &config.Config{
@@ -92,16 +92,16 @@ func TestLoad(t *testing.T) {
 				AnnotationRestartScheduleKey: controller.PreoomkillerAnnotationRestartScheduleKey,
 				AnnotationTZKey:              controller.PreoomkillerAnnotationTZKey,
 				RestartScheduleJitterMax:     30 * time.Second,
-				MinPodAgeBeforeEviction:      30 * time.Minute,
+				MinPodAgeBeforeEviction:      1800 * time.Second,
 				Interval:                     300 * time.Second,
 				PingerInterval:               10 * time.Second,
 			},
 		},
 		{
-			name: "override HTTP_PORT and INTERVAL",
+			name: "override PREOOMKILLER_HTTP_PORT and PREOOMKILLER_INTERVAL_SEC",
 			giveEnv: map[string]string{
-				"HTTP_PORT": "9090",
-				"INTERVAL":  "60",
+				"PREOOMKILLER_HTTP_PORT":    "9090",
+				"PREOOMKILLER_INTERVAL_SEC": "60",
 			},
 			wantErr: false,
 			wantCfg: &config.Config{
@@ -112,9 +112,9 @@ func TestLoad(t *testing.T) {
 			},
 		},
 		{
-			name: "override PINGER_INTERVAL",
+			name: "override PREOOMKILLER_PINGER_INTERVAL_SEC",
 			giveEnv: map[string]string{
-				"PINGER_INTERVAL": "5",
+				"PREOOMKILLER_PINGER_INTERVAL_SEC": "5",
 			},
 			wantErr: false,
 			wantCfg: &config.Config{
@@ -122,57 +122,57 @@ func TestLoad(t *testing.T) {
 			},
 		},
 		{
-			name: "invalid INTERVAL",
+			name: "invalid PREOOMKILLER_INTERVAL_SEC",
 			giveEnv: map[string]string{
-				"INTERVAL": "x",
+				"PREOOMKILLER_INTERVAL_SEC": "x",
 			},
 			wantErr: true,
 		},
 		{
-			name: "invalid PINGER_INTERVAL",
+			name: "invalid PREOOMKILLER_PINGER_INTERVAL_SEC",
 			giveEnv: map[string]string{
-				"PINGER_INTERVAL": "not-a-number",
+				"PREOOMKILLER_PINGER_INTERVAL_SEC": "not-a-number",
 			},
 			wantErr: true,
 		},
 		{
-			name: "invalid PREOOMKILLER_RESTART_SCHEDULE_JITTER_MAX",
+			name: "invalid PREOOMKILLER_RESTART_SCHEDULE_JITTER_MAX_SEC",
 			giveEnv: map[string]string{
-				"INTERVAL":        "300",
-				"PINGER_INTERVAL": "10",
-				"PREOOMKILLER_RESTART_SCHEDULE_JITTER_MAX": "x",
+				"PREOOMKILLER_INTERVAL_SEC":                    "300",
+				"PREOOMKILLER_PINGER_INTERVAL_SEC":             "10",
+				"PREOOMKILLER_RESTART_SCHEDULE_JITTER_MAX_SEC": "x",
 			},
 			wantErr: true,
 		},
 		{
-			name: "override METRICS_PORT and PREOOMKILLER_MIN_POD_AGE_BEFORE_EVICTION",
+			name: "override PREOOMKILLER_METRICS_PORT and PREOOMKILLER_MIN_POD_AGE_BEFORE_EVICTION_SEC",
 			giveEnv: map[string]string{
-				"INTERVAL":        "300",
-				"PINGER_INTERVAL": "10",
-				"METRICS_PORT":    "9091",
-				"PREOOMKILLER_MIN_POD_AGE_BEFORE_EVICTION": "15",
+				"PREOOMKILLER_INTERVAL_SEC":                    "300",
+				"PREOOMKILLER_PINGER_INTERVAL_SEC":             "10",
+				"PREOOMKILLER_METRICS_PORT":                    "9091",
+				"PREOOMKILLER_MIN_POD_AGE_BEFORE_EVICTION_SEC": "900",
 			},
 			wantErr: false,
 			wantCfg: &config.Config{
 				MetricsPort:             "9091",
-				MinPodAgeBeforeEviction: 15 * time.Minute,
+				MinPodAgeBeforeEviction: 900 * time.Second,
 			},
 		},
 		{
-			name: "invalid PREOOMKILLER_MIN_POD_AGE_BEFORE_EVICTION",
+			name: "invalid PREOOMKILLER_MIN_POD_AGE_BEFORE_EVICTION_SEC",
 			giveEnv: map[string]string{
-				"INTERVAL":        "300",
-				"PINGER_INTERVAL": "10",
-				"PREOOMKILLER_MIN_POD_AGE_BEFORE_EVICTION": "x",
+				"PREOOMKILLER_INTERVAL_SEC":                    "300",
+				"PREOOMKILLER_PINGER_INTERVAL_SEC":             "10",
+				"PREOOMKILLER_MIN_POD_AGE_BEFORE_EVICTION_SEC": "x",
 			},
 			wantErr: true,
 		},
 		{
-			name: "negative PREOOMKILLER_MIN_POD_AGE_BEFORE_EVICTION",
+			name: "negative PREOOMKILLER_MIN_POD_AGE_BEFORE_EVICTION_SEC",
 			giveEnv: map[string]string{
-				"INTERVAL":        "300",
-				"PINGER_INTERVAL": "10",
-				"PREOOMKILLER_MIN_POD_AGE_BEFORE_EVICTION": "-1",
+				"PREOOMKILLER_INTERVAL_SEC":                    "300",
+				"PREOOMKILLER_PINGER_INTERVAL_SEC":             "10",
+				"PREOOMKILLER_MIN_POD_AGE_BEFORE_EVICTION_SEC": "-1",
 			},
 			wantErr: true,
 		},
