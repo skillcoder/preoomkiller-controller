@@ -4,6 +4,7 @@ kind: Kustomization
 labels:
   - pairs:
       app.kubernetes.io/name: memory-leaker
+      app.kubernetes.io/part-of: memory-leaker-example
       app.kubernetes.io/managed-by: kustomize
 
 resources:

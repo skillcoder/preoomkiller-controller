@@ -16,9 +16,17 @@ spec:
       labels:
         app.kubernetes.io/name: memory-leaker
         app.kubernetes.io/component: example
+        # Required for preoomkiller-controller to watch this pod.
         preoomkiller.beta.k8s.skillcoder.com/enabled: "true"
       annotations:
-        preoomkiller.beta.k8s.skillcoder.com/memory-threshold: "50Mi"
+        # Memory threshold: absolute quantity (e.g. "50Mi") or percentage of limit (e.g. "70%").
+        preoomkiller.beta.k8s.skillcoder.com/memory-threshold: "70%"
+        # Cron schedule for periodic restarts (5-field: minute hour dom month dow). Example: daily at 18:49 in TZ defined below.
+        # also supports inline TZ: "CRON_TZ=Europe/Madrid 49 18 * * *"
+        preoomkiller.beta.k8s.skillcoder.com/restart-schedule: "49 18 * * *"
+        # Timezone for restart-schedule (IANA, e.g. "UTC", "Europe/London").
+        preoomkiller.beta.k8s.skillcoder.com/tz: "Europe/Madrid"
+        # preoomkiller.beta.k8s.skillcoder.com/restart-at — set by controller (RFC3339); do not set manually
     spec:
       containers:
       - name: memory-leaker
