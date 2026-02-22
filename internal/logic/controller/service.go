@@ -186,6 +186,12 @@ func (s *Service) processScheduledRestart(
 
 	restartAtValue := nextRun.Format(time.RFC3339)
 
+	logger.InfoContext(ctx, "setting restart-at annotation",
+		"restartAt", restartAtValue,
+		"tz", tz,
+		"spec", spec,
+	)
+
 	if err := s.repo.SetAnnotationCommand(
 		ctx,
 		pod.Namespace,
@@ -299,7 +305,7 @@ func (s *Service) scheduleEviction(
 
 	s.pendingTimers[key] = timer
 
-	logger.DebugContext(ctx, "scheduled eviction goroutine",
+	logger.InfoContext(ctx, "scheduled eviction goroutine",
 		"pod", name,
 		"namespace", namespace,
 		"at", at.Format(time.RFC3339),
