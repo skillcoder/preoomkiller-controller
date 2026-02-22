@@ -4,7 +4,7 @@
 
 - **Detect**: Pod would be evicted (memory-threshold or scheduled) but pod age < configured minimum (default 30 min).
 - **Action**: Log warn, **skip eviction** (protection), and increment a Prometheus counter so alerts can fire.
-- **Config**: Min pod age configurable via ENV (e.g. `PREOOMKILLER_MIN_POD_AGE_BEFORE_EVICTION_SEC`, default 1800s = 30m).
+- **Config**: Min pod age configurable via ENV (e.g. `PREOOMKILLER_MIN_POD_AGE_BEFORE_EVICTION`, default `30m`; supports units: `s`, `m`, `h`).
 
 ## Architecture
 
@@ -35,7 +35,7 @@ flowchart LR
 **File:** [internal/config/config.go](internal/config/config.go)
 
 - Add `MinPodAgeBeforeEviction time.Duration` to `Config`.
-- Read from ENV, e.g. `PREOOMKILLER_MIN_POD_AGE_BEFORE_EVICTION_SEC`; default `1800` (seconds = 30m). Parse as integer seconds; support only non-negative values (0 = disabled).
+- Read from ENV, e.g. `PREOOMKILLER_MIN_POD_AGE_BEFORE_EVICTION`; default `30m`. Parse with `time.ParseDuration` (units: `s`, `m`, `h`); support only non-negative values (0 = disabled).
 - Add `MetricsPort string` (default `9090`), from ENV `PREOOMKILLER_METRICS_PORT`.
 
 ## 2. Logic layer (controller)

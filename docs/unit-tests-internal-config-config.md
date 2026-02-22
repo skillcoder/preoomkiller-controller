@@ -9,7 +9,7 @@
 
 | Target | Description |
 |--------|-------------|
-| `Load()` | Reads env, parses PREOOMKILLER_INTERVAL_SEC/PREOOMKILLER_PINGER_INTERVAL_SEC and other PREOOMKILLER_* vars, applies defaults. |
+| `Load()` | Reads env, parses PREOOMKILLER_INTERVAL/PREOOMKILLER_PINGER_INTERVAL (duration with units s/m/h) and other PREOOMKILLER_* vars, applies defaults. |
 
 ## Test cases (table-driven, give/want)
 
@@ -17,7 +17,7 @@
   - `giveEnv`: map of env vars to set (use `t.Setenv`).
   - `wantErr`: expected error (nil for success).
   - `wantCfg`: optional; key fields to assert for success (e.g. `Interval`, `PingerInterval`, `HTTPPort`, `PodLabelSelector`).
-  - Cases: all defaults; override PREOOMKILLER_HTTP_PORT, PREOOMKILLER_INTERVAL_SEC, PREOOMKILLER_PINGER_INTERVAL_SEC; invalid PREOOMKILLER_INTERVAL_SEC; invalid PREOOMKILLER_PINGER_INTERVAL_SEC.
+  - Cases: all defaults; override PREOOMKILLER_HTTP_PORT, PREOOMKILLER_INTERVAL, PREOOMKILLER_PINGER_INTERVAL; duration with explicit units (e.g. 5m); invalid/negative duration.
 
 ## Notes
 

@@ -1,7 +1,9 @@
 package config
 
+import "time"
+
 // Env key constants. All controller configuration env vars use PREOOMKILLER_ prefix;
-// duration values are in seconds and use _SEC suffix.
+// duration values support explicit units (e.g. 5m, 40s, 2h).
 
 // Path to kubeconfig file. If unset, KUBECONFIG is used as fallback.
 const envKeyKubeConfig = "PREOOMKILLER_KUBECONFIG"
@@ -33,17 +35,29 @@ const envKeyAnnotationRestartSchedule = "PREOOMKILLER_ANNOTATION_RESTART_SCHEDUL
 // Annotation key for schedule timezone (IANA, e.g. America/New_York).
 const envKeyAnnotationTZ = "PREOOMKILLER_ANNOTATION_TZ"
 
-// Reconciliation interval in seconds.
-const envKeyIntervalSec = "PREOOMKILLER_INTERVAL_SEC"
+// Reconciliation interval. Units: s, m, h (e.g. 300s, 5m).
+const (
+	envKeyInterval = "PREOOMKILLER_INTERVAL"
+	envMinInterval = 30 * time.Second
+)
 
-// Pinger check interval in seconds.
-const envKeyPingerIntervalSec = "PREOOMKILLER_PINGER_INTERVAL_SEC"
+// Pinger check interval. Units: s, m, h (e.g. 10s, 1m).
+const (
+	envKeyPingerInterval = "PREOOMKILLER_PINGER_INTERVAL"
+	envMinPingerInterval = time.Second
+)
 
-// Max jitter in seconds added to scheduled eviction time.
-const envKeyRestartScheduleJitterMaxSec = "PREOOMKILLER_RESTART_SCHEDULE_JITTER_MAX_SEC"
+// Max jitter added to scheduled eviction time. Units: s, m, h (e.g. 30s).
+const (
+	envKeyRestartScheduleJitterMax = "PREOOMKILLER_RESTART_SCHEDULE_JITTER_MAX"
+	envMinRestartScheduleJitterMax = time.Second
+)
 
-// Minimum pod age in seconds before eviction is allowed; 0 disables the check.
-const envKeyMinPodAgeBeforeEvictionSec = "PREOOMKILLER_MIN_POD_AGE_BEFORE_EVICTION_SEC"
+// Minimum pod age before eviction is allowed; 0 disables the check. Units: s, m, h (e.g. 30m).
+const (
+	envKeyMinPodAgeBeforeEviction = "PREOOMKILLER_MIN_POD_AGE_BEFORE_EVICTION"
+	envMinMinPodAgeBeforeEviction = time.Minute
+)
 
 // Standard k8s env keys used as fallback when PREOOMKILLER_* are unset.
 const (

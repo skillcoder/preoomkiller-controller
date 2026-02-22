@@ -40,8 +40,8 @@ spec:
       - name: controller
         image: gha.io/skillcoder/preoomkiller-controller:latest
         env:
-        - name: PREOOMKILLER_INTERVAL_SEC
-          value: "60"
+        - name: PREOOMKILLER_INTERVAL
+          value: "60s"
         - name: PREOOMKILLER_POD_LABEL_SELECTOR
           value: "preoomkiller-enabled=true"
         - name: PREOOMKILLER_ANNOTATION_MEMORY_THRESHOLD
@@ -84,7 +84,7 @@ This operation is safe because it uses Kubernetes' pod **eviction** API, which r
 
 ### Environment variables
 
-All configuration uses the `PREOOMKILLER_` prefix. Duration values are in **seconds** and use the `_SEC` suffix.
+All configuration uses the `PREOOMKILLER_` prefix. Duration values support **explicit units**: `s` (seconds), `m` (minutes), `h` (hours), e.g. `5m`, `40s`, `2h`.
 
 | Variable | Default | Description |
 | -------- | ------- | ----------- |
@@ -94,16 +94,14 @@ All configuration uses the `PREOOMKILLER_` prefix. Duration values are in **seco
 | `PREOOMKILLER_LOG_FORMAT` | `json` | Log format (`json` or `text`). |
 | `PREOOMKILLER_HTTP_PORT` | `8080` | Port for health/readiness HTTP server. |
 | `PREOOMKILLER_METRICS_PORT` | `9090` | Port for Prometheus metrics (`GET /metrics`). |
-| `PREOOMKILLER_INTERVAL_SEC` | `300` | Reconciliation interval in seconds. |
-| `PREOOMKILLER_PINGER_INTERVAL_SEC` | `10` | Pinger check interval in seconds. |
+| `PREOOMKILLER_INTERVAL` | `300s` | Reconciliation interval. Units: `s`, `m`, `h` (e.g. `5m`, `40s`). |
+| `PREOOMKILLER_PINGER_INTERVAL` | `10s` | Pinger check interval. Units: `s`, `m`, `h`. |
 | `PREOOMKILLER_POD_LABEL_SELECTOR` | `preoomkiller.beta.k8s.skillcoder.com/enabled=true` | Label selector to list pods. |
 | `PREOOMKILLER_ANNOTATION_MEMORY_THRESHOLD` | `preoomkiller.beta.k8s.skillcoder.com/memory-threshold` | Annotation key read from pod metadata for the memory threshold. See below for value format. |
 | `PREOOMKILLER_ANNOTATION_RESTART_SCHEDULE` | `preoomkiller.beta.k8s.skillcoder.com/restart-schedule` | Annotation key for scheduled restart cron. |
 | `PREOOMKILLER_ANNOTATION_TZ` | `preoomkiller.beta.k8s.skillcoder.com/tz` | Annotation key for schedule timezone. |
-| `PREOOMKILLER_RESTART_SCHEDULE_JITTER_MAX_SEC` | `30` | Max jitter in seconds for scheduled eviction. |
-| `PREOOMKILLER_MIN_POD_AGE_BEFORE_EVICTION_SEC` | `1800` | Minimum pod age in **seconds** before eviction is allowed (default 1800 = 30 min). Evictions are skipped (and a metric incremented) when the pod is younger; use `0` to disable. Helps avoid too-frequent restarts. |
-
-**Migration:** If you previously used `PREOOMKILLER_MIN_POD_AGE_BEFORE_EVICTION` (minutes), use `PREOOMKILLER_MIN_POD_AGE_BEFORE_EVICTION_SEC` with the value in seconds (e.g. 30 minutes → `1800`, 15 minutes → `900`).
+| `PREOOMKILLER_RESTART_SCHEDULE_JITTER_MAX` | `30s` | Max jitter for scheduled eviction. Units: `s`, `m`, `h`. |
+| `PREOOMKILLER_MIN_POD_AGE_BEFORE_EVICTION` | `30m` | Minimum pod age before eviction is allowed. Evictions are skipped (and a metric incremented) when the pod is younger; use `0` to disable. Units: `s`, `m`, `h` (e.g. `30m`, `15m`). |
 
 **Memory threshold annotation value** (the value pods set on the annotation key above):
 
@@ -123,7 +121,7 @@ Inline timezone in the schedule is also supported: `"CRON_TZ=America/New_York 0 
 
 The controller writes a **`preoomkiller.beta.k8s.skillcoder.com/restart-at`** annotation (ISO 8601 timestamp) to the pod when it schedules a restart. Do not set this annotation manually; it is managed by the controller and disappears when the pod is evicted and recreated.
 
-Eviction runs at the scheduled time plus a random jitter (see `PREOOMKILLER_RESTART_SCHEDULE_JITTER_MAX_SEC`). If the controller was down at the scheduled time, it detects missed evictions and evicts on the next reconcile.
+Eviction runs at the scheduled time plus a random jitter (see `PREOOMKILLER_RESTART_SCHEDULE_JITTER_MAX`). If the controller was down at the scheduled time, it detects missed evictions and evicts on the next reconcile.
 
 ### Metrics and alerting
 
@@ -131,7 +129,7 @@ Prometheus metrics are served on a **separate port** (default `9090`, configurab
 
 | Metric | Type | Labels | Meaning |
 | ------ | ---- | ------ | ------- |
-| `preoomkiller_eviction_skipped_pod_too_young_total` | Counter | `namespace`, `pod` | Number of evictions skipped because the pod was younger than `PREOOMKILLER_MIN_POD_AGE_BEFORE_EVICTION_SEC` (possible misconfiguration or too-frequent restarts). |
+| `preoomkiller_eviction_skipped_pod_too_young_total` | Counter | `namespace`, `pod` | Number of evictions skipped because the pod was younger than `PREOOMKILLER_MIN_POD_AGE_BEFORE_EVICTION` (possible misconfiguration or too-frequent restarts). |
 
 **Example PromQL alerts**
 
@@ -158,7 +156,7 @@ Prometheus metrics are served on a **separate port** (default `9090`, configurab
     severity: warning
   annotations:
     summary: "Preoomkiller skipped eviction (pod too young)"
-    description: "At least one eviction was skipped because the pod was younger than the configured minimum age. Check pod restarts and PREOOMKILLER_MIN_POD_AGE_BEFORE_EVICTION_SEC."
+    description: "At least one eviction was skipped because the pod was younger than the configured minimum age. Check pod restarts and PREOOMKILLER_MIN_POD_AGE_BEFORE_EVICTION."
 ```
 
 ### Deployment

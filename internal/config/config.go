@@ -3,7 +3,6 @@ package config
 import (
 	"fmt"
 	"os"
-	"strconv"
 	"time"
 
 	"github.com/skillcoder/preoomkiller-controller/internal/logic/controller"
@@ -49,60 +48,44 @@ func Load() (*Config, error) {
 		),
 	}
 
-	pingerIntervalSecondsStr := getEnvOrDefault(envKeyPingerIntervalSec, "10")
+	var err error
 
-	pingerIntervalSeconds, err := strconv.Atoi(pingerIntervalSecondsStr)
+	cfg.PingerInterval, err = parseDurationEnv(envKeyPingerInterval, "10s", envMinPingerInterval)
 	if err != nil {
-		return nil, fmt.Errorf("parse pinger interval: %w", err)
+		return nil, fmt.Errorf("parse duration env: %s: %w", envKeyPingerInterval, err)
 	}
 
-	cfg.PingerInterval = time.Duration(pingerIntervalSeconds) * time.Second
-
-	intervalSecondsStr := getEnvOrDefault(envKeyIntervalSec, "300")
-
-	intervalSeconds, err := strconv.Atoi(intervalSecondsStr)
+	cfg.Interval, err = parseDurationEnv(envKeyInterval, "300s", envMinInterval)
 	if err != nil {
-		return nil, fmt.Errorf("parse interval: %w", err)
+		return nil, fmt.Errorf("parse duration env: %s: %w", envKeyInterval, err)
 	}
 
-	cfg.Interval = time.Duration(intervalSeconds) * time.Second
-
-	jitterSecondsStr := getEnvOrDefault(envKeyRestartScheduleJitterMaxSec, "30")
-
-	jitterSeconds, err := strconv.Atoi(jitterSecondsStr)
+	cfg.RestartScheduleJitterMax, err = parseDurationEnv(envKeyRestartScheduleJitterMax, "30s", envMinRestartScheduleJitterMax)
 	if err != nil {
-		return nil, fmt.Errorf("parse restart schedule jitter: %w", err)
+		return nil, fmt.Errorf("parse duration env: %s: %w", envKeyRestartScheduleJitterMax, err)
 	}
 
-	cfg.RestartScheduleJitterMax = time.Duration(jitterSeconds) * time.Second
-
-	minPodAge, err := parseMinPodAgeBeforeEvictionSec()
+	cfg.MinPodAgeBeforeEviction, err = parseDurationEnv(envKeyMinPodAgeBeforeEviction, "30m", envMinMinPodAgeBeforeEviction)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("parse duration env: %s: %w", envKeyMinPodAgeBeforeEviction, err)
 	}
-
-	cfg.MinPodAgeBeforeEviction = minPodAge
 
 	return cfg, nil
 }
 
-func parseMinPodAgeBeforeEvictionSec() (time.Duration, error) {
-	minPodAgeSecondsStr := getEnvOrDefault(envKeyMinPodAgeBeforeEvictionSec, "1800")
+func parseDurationEnv(key, defaultVal string, minDuration time.Duration) (time.Duration, error) {
+	s := getEnvOrDefault(key, defaultVal)
 
-	minPodAgeSeconds, err := strconv.Atoi(minPodAgeSecondsStr)
+	d, err := time.ParseDuration(s)
 	if err != nil {
-		return 0, fmt.Errorf("parse min pod age before eviction: %w", err)
+		return 0, fmt.Errorf("parse duration: %w", err)
 	}
 
-	if minPodAgeSeconds < 0 {
-		return 0, fmt.Errorf(
-			"%s must be non-negative, got %d",
-			envKeyMinPodAgeBeforeEvictionSec,
-			minPodAgeSeconds,
-		)
+	if d < minDuration {
+		return 0, fmt.Errorf("value must be at least %s, got %s", minDuration.String(), d.String())
 	}
 
-	return time.Duration(minPodAgeSeconds) * time.Second, nil
+	return d, nil
 }
 
 func getEnvOrDefault(key, defaultValue string) string {
